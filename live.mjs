@@ -16,7 +16,11 @@ for (const [name, bt, opts] of [['chromium', chromium, {}], ['webkit', webkit, {
   await p.goto(URL0 + '?t=' + Date.now(), { waitUntil: 'networkidle' })
   await p.waitForFunction(() => window.__magmaReady && document.getElementById('loading').hidden, null, { timeout: 20000 })
   if (opts.hasTouch) await p.tap('#btnStart'); else await p.click('#btnStart')
-  await p.waitForTimeout(800)
+  // 始まりの演出（振り返って津波を見る）が終わるまで待つ
+  await p.waitForTimeout(300); const intro = await p.evaluate(() => ({ mode: magma.mode, warn: document.getElementById('warn').hidden ? '' : document.getElementById('warnText').textContent }))
+  await p.waitForTimeout(1500); await p.screenshot({ path: `shots/live-${name}-intro.png` })
+  await p.waitForFunction(() => magma.mode === 'play', null, { timeout: 6000 }); await p.waitForTimeout(300)
+  out.push(`${name}: intro=${JSON.stringify(intro)}`)
   // 遊びの通し: 跳ぶ → ワイヤー → 離す → マグマに落ちて結果
   const flow = await p.evaluate(() => {
     magma.dbg.pause(true); const g = magma.g
