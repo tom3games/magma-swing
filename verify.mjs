@@ -19,7 +19,8 @@ async function t(name, fn) {
 const expect = (c, msg) => { if (!c) throw new Error(msg) }
 const GL = ['--use-angle=metal', '--enable-unsafe-swiftshader']
 async function open(browser, opts = {}) {
-  const ctx = await browser.newContext({ locale: 'ja-JP', viewport: { width: 390, height: 844 }, acceptDownloads: true, ...opts })
+  const { route, noWait, ...copts } = opts
+  const ctx = await browser.newContext({ locale: 'ja-JP', viewport: { width: 390, height: 844 }, acceptDownloads: true, ...copts })
   await muteContext(ctx)
   await ctx.addInitScript(() => {
     try { localStorage.clear() } catch (e) {}
@@ -31,8 +32,11 @@ async function open(browser, opts = {}) {
   p.on('pageerror', e => p.errs.push('pageerror ' + e.message))
   p.on('console', m => { if (m.type() === 'error') p.errs.push('console ' + m.text()) })
   p.on('requestfailed', r => { if (!/fonts\.(googleapis|gstatic)/.test(r.url())) p.errs.push('reqfail ' + r.url() + ' ' + (r.failure() && r.failure().errorText)) })
-  await p.goto(URL0); await p.waitForFunction(() => window.__magmaReady, null, { timeout: 15000 })
-  await p.waitForFunction(() => document.getElementById('loading').hidden, null, { timeout: 15000 })
+  if (route) await route(p)
+  if (noWait) { await p.goto(URL0, { waitUntil: 'commit' }); return p }
+  await p.goto(URL0)
+  try { await p.waitForFunction(() => window.__magmaReady && window.__magmaLoaded && document.getElementById('boot').hidden, null, { timeout: 15000 }) }
+  catch (e) { throw new Error('起動しない ' + JSON.stringify(await p.evaluate(() => ({ ready: window.__magmaReady, loaded: window.__magmaLoaded, boot: document.getElementById('boot').hidden, err: document.getElementById('boot-err') && document.getElementById('boot-err').innerText }))) + ' ' + p.errs.join('|')) }
   return p
 }
 const fit = q => q.evaluate(() => {
@@ -48,9 +52,45 @@ const fit = q => q.evaluate(() => {
   for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) { if (bs[i][2] !== bs[j][2]) continue; const a = bs[i][1], b = bs[j][1]; if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) over.push('overlap ' + bs[i][0] + '/' + bs[j][0]) }
   return { H, over: over.slice(0, 6) }
 })
+// ---------- 読み込み中の画面（2026-11-03 本人「読み込みがすごい遅い。いい感じのロード中の画面を」）
+async function bootTests(browser) {
+  await t('ロード画面: 最初に出て、進み具合が本物の読み込みで進み、読み込み後に消える', async () => {
+    // 人物の 3D を遅く届けて、ロード画面が出ている間を作る
+    const q = await open(browser, { noWait: true, route: q => q.route(/Ranger\.glb/, async r => { await new Promise(z => setTimeout(z, 3000)); r.continue() }) })
+    await q.waitForFunction(() => document.getElementById('bootPct'), null, { timeout: 5000 })
+    const first = await q.evaluate(() => { const b = document.getElementById('boot'), r = b.getBoundingClientRect(); return { shown: !b.hidden && r.width === innerWidth && r.height === innerHeight, msg: document.getElementById('bootMsg').textContent, pct: document.getElementById('bootPct').textContent } })
+    await q.waitForTimeout(700)
+    const mid = await q.evaluate(() => ({ shown: !document.getElementById('boot').hidden, loaded: !!window.__magmaLoaded, p: window.__bootProgress() }))
+    await q.screenshot({ path: `${ROOT}/shots/boot-phone.png` })
+    await q.waitForFunction(() => window.__magmaLoaded, null, { timeout: 15000 })
+    const atLoad = await q.evaluate(() => window.__bootProgress())
+    await q.waitForFunction(() => document.getElementById('boot').hidden, null, { timeout: 3000 })
+    const files = await q.evaluate(() => { const list = window.__bootFiles, got = performance.getEntriesByType('resource').map(e => new URL(e.name).pathname.replace(/^\//, '')).filter(u => /\.(js|glb)$/.test(u)); return { missing: got.filter(u => !list.some(f => u.endsWith(f))), unused: list.filter(f => !got.some(u => u.endsWith(f))) } })
+    expect(first.shown && first.msg.length >= 10 && mid.shown && !mid.loaded && mid.p > 20 && mid.p < 100 && atLoad === 100, JSON.stringify({ first, mid, atLoad }))
+    expect(!files.missing.length && !files.unused.length, '進み具合の一覧の漏れ ' + JSON.stringify(files))
+    expect(q.errs.length === 0, q.errs.join('|'))
+    await q.close(); return { first: first.pct, mid: mid.p, atLoad }
+  })
+  await t('ロード画面: プログラムが1つ 404 なら、すぐに起動失敗の表示が出る', async () => {
+    const q = await open(browser, { noWait: true, route: q => q.route(/\/js\/data\.js/, r => r.fulfill({ status: 404, body: 'not found' })) })
+    await q.waitForSelector('#boot-err', { timeout: 6000 })
+    const r = await q.evaluate(() => ({ text: document.getElementById('boot-err').innerText, boot: !document.getElementById('boot').hidden, btn: !!document.querySelector('#boot-err button') }))
+    await q.screenshot({ path: `${ROOT}/shots/boot-error-phone.png` })
+    expect(/起動できませんでした/.test(r.text) && /data\.js/.test(r.text) && r.boot && r.btn, JSON.stringify(r))
+    await q.close(); return r.text.split('\n')[0]
+  })
+  await t('ロード画面: 人物の 3D が 404 でも、円柱の代わりで遊べる所まで進む', async () => {
+    const q = await open(browser, { noWait: true, route: q => q.route(/Ranger\.glb/, r => r.fulfill({ status: 404, body: 'x' })) })
+    await q.waitForFunction(() => window.__magmaLoaded && document.getElementById('boot').hidden, null, { timeout: 15000 })
+    const r = await q.evaluate(() => ({ err: !!document.getElementById('boot-err'), failed: magma.mode }))
+    expect(!r.err && r.failed === 'title', JSON.stringify(r)); await q.close(); return r
+  })
+}
+
 const SIZES = [[360, 640, 'small'], [390, 844, 'phone'], [844, 390, 'land'], [667, 375, 'land-se'], [768, 1024, 'tab'], [1440, 900, 'pc']]
 
 const browser = await chromium.launch({ ...MUTE_LAUNCH, args: [...MUTE_LAUNCH.args, ...GL] })
+await bootTests(browser)
 const p = await open(browser)
 await t('起動時にエラーが出ない', async () => { expect(p.errs.length === 0, p.errs.join('|')) })
 await t('ブラウザの拡大が起きない', async () => {
@@ -294,20 +334,20 @@ await t('津波までの距離の表示が正しい・近いと点滅', async ()
   const ok = r.every(([gap, txt, near]) => Number(txt) === Math.round(gap) && near === (Math.round(gap) < 30))
   expect(ok, JSON.stringify(r)); return r.map(x => x.join(':')).join(' ')
 })
-await t('迫力: 速いと速さの線・視野が広がる・風の音が大きく、遅いと出ない（空中しっぽ取り v5 から）', async () => {
+await t('迫力: 速いと速さの線・視野が広がる・風の音が大きく（最大0.35）、遅い時と地面では風が鳴らない。風と溶岩は WAV のループ', async () => {
   await p.evaluate(() => magma.start(12))
   const r = await p.evaluate(() => {
     magma.dbg.pause(true); const g = magma.g, out = {}
-    for (const [k, v] of [['slow', 8], ['fast', 36]]) {
-      Object.assign(g.p, { grounded: false, y: 14, vx: 0, vy: 0, vz: v }); g.waveZ = g.p.z - 100
-      for (let i = 0; i < 40; i++) { Object.assign(g.p, { y: 14, vy: 0, vz: v }); magma.dbg.step(0) }
+    for (const [k, v, gr] of [['slow', 8], ['fast', 36], ['ground', 36, true]]) {
+      Object.assign(g.p, { grounded: !!gr, y: 14, vx: 0, vy: 0, vz: v }); g.waveZ = g.p.z - 100
+      for (let i = 0; i < 40; i++) { Object.assign(g.p, { grounded: !!gr, y: 14, vy: 0, vz: v }); magma.dbg.step(0) }
       const c = document.getElementById('speedfx'), cx = c.getContext('2d')
       let lit = 0; if (c.width) { const d = cx.getImageData(0, 0, c.width, c.height).data; for (let i = 3; i < d.length; i += 4 * 7) if (d[i] > 0) lit++ }
       const al = Snd.loops.air; out[k] = { ...magma.dbg.fx(), lit, air: al && al.g ? al.g.gain.value : -1 }
     }
-    magma.dbg.pause(false); return { slowK: out.slow.speedK, fastK: +out.fast.speedK.toFixed(2), slowLit: out.slow.lit, fastLit: out.fast.lit, fovSlow: +out.slow.fov.toFixed(1), fovFast: +out.fast.fov.toFixed(1), airSlow: +out.slow.air.toFixed(2), airFast: +out.fast.air.toFixed(2) }
+    magma.dbg.pause(false); return { slowK: out.slow.speedK, fastK: +out.fast.speedK.toFixed(2), slowLit: out.slow.lit, fastLit: out.fast.lit, fovSlow: +out.slow.fov.toFixed(1), fovFast: +out.fast.fov.toFixed(1), airSlow: +out.slow.air.toFixed(2), airFast: +out.fast.air.toFixed(2), airGround: +out.ground.air.toFixed(2), airUrl: Snd.loops.air && Snd.loops.air.url, lavaUrl: Snd.loops.lava && Snd.loops.lava.url }
   })
-  expect(r.slowK === 0 && r.slowLit === 0 && r.fastK > 0.8 && r.fastLit > 50 && r.fovFast - r.fovSlow > 8 && r.fovFast <= 62 + 18 + 7 && r.airFast > r.airSlow + 0.3, JSON.stringify(r)); return r
+  expect(r.slowK === 0 && r.slowLit === 0 && r.fastK > 0.8 && r.fastLit > 50 && r.fovFast - r.fovSlow > 8 && r.fovFast <= 62 + 18 + 7 && r.airSlow === 0 && r.airFast === 0.35 && r.airGround === 0 && r.airUrl === 'snd/wind_loop.wav' && r.lavaUrl === 'snd/lava_loop.wav', JSON.stringify(r)); return r
 })
 await t('迫力: リール・屋上に着いた・津波を振り切った瞬間に一瞬止まって光る。カメラの傾きは0.1rad以内', async () => {
   await p.evaluate(() => magma.start(13))

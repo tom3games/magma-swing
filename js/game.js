@@ -1,8 +1,8 @@
 // 地面はマグマ（MAGMA SWING）の描画と入力。中身の計算は shared/sim.js
 import * as THREE from 'three'
-import { T } from './data.js?v=5'
-import * as SIM from '../shared/sim.js?v=5'
-import { CharRunnerModel, loadCharAssets, charAssets } from './charmodel.js?v=5'
+import { T } from './data.js?v=6'
+import * as SIM from '../shared/sim.js?v=6'
+import { CharRunnerModel, loadCharAssets, charAssets } from './charmodel.js?v=6'
 const { K, makeGame, step, pickHook, botInput, makeBot } = SIM
 
 const $ = id => document.getElementById(id)
@@ -23,8 +23,11 @@ Snd.def({
 const bgm = name => Snd.loop('bgm', name ? `snd/${name}.mp3` : null, name === 'bgm_play' ? 0.32 : 0.36)
 function soundStart() {
   Snd.init()
-  if (!Snd._beds) { Snd._beds = true; Snd.loop('lava', 'snd/lava_loop.mp3', 0.28, 1, 0.55); Snd.loop('air', 'snd/air_loop.mp3', 0.0001, 0.3) }   // 風の環境音（速さで大きく）
+  if (!Snd._beds) { Snd._beds = true; Snd.loop('lava', 'snd/lava_loop.wav', 0.3, 1); Snd.loop('air', 'snd/wind_loop.wav', 0.0001, 0.3) }   // 溶岩（炉の炎を低くした継ぎ目なしループ）と風（速さで大きく）
 }
+
+// 風の音量: 空中で 16m/秒 から上げ、最大 0.35（ワイヤー系で統一）
+const windVol = (air, v) => air ? Math.min(0.35, Math.max(0, (v - 16) / 40)) : 0
 
 // ---------- 描画の土台
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
@@ -748,7 +751,7 @@ function draw(dt) {
   fovKick *= Math.exp(-dt * 6)
   camera.fov = cam.fov + fovKick; camera.updateProjectionMatrix()
   drawSpeed(S.mode === 'play' && !p.dead ? sp : 0, dt)
-  if (Snd.ctx) { const wl = Snd.loops.air; if (wl && wl.g) wl.g.gain.value = S.mode === 'play' && !p.dead ? Math.min(0.6, Math.max(0, (sp - 6) / 40)) : 0 }   // 風の環境音
+  if (Snd.ctx) { const wl = Snd.loops.air; if (wl && wl.g) wl.g.gain.value = windVol(S.mode === 'play' && !p.dead && !p.grounded && !p.cling, sp) }   // 風の環境音（地面・壁では鳴らさない）
   sky.position.copy(camera.position)
   updateParts(dt)
   // HUD
@@ -808,7 +811,7 @@ applyLang()
 show('title')
 startDemo()
 requestAnimationFrame(frame)
-loadCharAssets().then(() => { newModel(); $('loading').hidden = true })
+loadCharAssets().then(() => { newModel(); window.__magmaLoaded = true; if (window.__bootDone) window.__bootDone() })   // 人物まで読めたら読み込み中の画面を消す（失敗した時は円柱の代わりで続ける）
 addEventListener('pointerdown', () => { soundStart(); if (S.mode === 'title') bgm('bgm_title') }, { once: true })
 
 // 検証用の窓口

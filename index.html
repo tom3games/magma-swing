@@ -17,18 +17,69 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <style>
 [hidden]{display:none!important}
 html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 button,canvas{touch-action:manipulation}
-#boot-err{position:fixed;inset:auto 8px 8px 8px;z-index:99;background:#fff;color:#b00;font:12px/1.4 monospace;white-space:pre-wrap;padding:10px;border-radius:8px}
+/* 読み込み中: 溶岩がぼこぼこ泡立つ。HTML と CSS だけで、最初の描画を待たせない */
+#boot{position:fixed;inset:0;z-index:50;overflow:hidden;background:linear-gradient(180deg,#140b09 0%,#2a120a 55%,#5a1a08 78%,#8f2a0a 100%);color:#f7f7f2;font-family:'BIZ UDPGothic','Hiragino Sans','Yu Gothic',sans-serif;transition:opacity .35s ease}
+#boot.out{opacity:0;pointer-events:none}
+#boot .glow{position:absolute;left:-10%;right:-10%;bottom:16vh;height:30vh;background:radial-gradient(60% 70% at 45% 100%,rgba(255,120,30,.45),transparent 70%);animation:bglow 3.2s ease-in-out infinite alternate}
+#boot .city{position:absolute;right:0;bottom:calc(24vh - 4px);width:min(560px,96vw);height:auto}
+#boot .hk{animation:bglow 1.4s ease-in-out infinite alternate}
+#boot .pool{position:absolute;left:0;right:0;bottom:0;height:24vh;background:linear-gradient(180deg,#ff8a2a 0%,#e8521c 18%,#b5330c 55%,#5a1206 100%)}
+#boot .crest{position:absolute;left:0;bottom:calc(24vh - 13px);width:200%;height:28px;animation:bslide 7s linear infinite}
+#boot .crest svg{width:100%;height:100%;display:block}
+#boot .crust{position:absolute;bottom:0;height:24vh;left:0;right:0;opacity:.55;background:radial-gradient(22px 7px at 18% 34%,#3a0c04 60%,transparent 62%),radial-gradient(34px 9px at 63% 52%,#3a0c04 60%,transparent 62%),radial-gradient(16px 5px at 84% 26%,#3a0c04 60%,transparent 62%),radial-gradient(28px 8px at 36% 76%,#3a0c04 60%,transparent 62%)}
+#boot .bub{position:absolute;bottom:calc(24vh - 10px);width:var(--s);height:var(--s);margin-left:calc(var(--s) / -2);border-radius:50% 50% 46% 46%;background:radial-gradient(circle at 35% 30%,#ffd27a,#ff7a22 45%,#c2380c 80%);box-shadow:0 0 12px rgba(255,140,40,.7);transform-origin:50% 100%;transform:scale(0);animation:bpop var(--d) ease-in infinite;animation-delay:var(--w)}
+#boot .bub::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid rgba(255,190,90,.8);opacity:0;animation:bring var(--d) ease-out infinite;animation-delay:var(--w)}
+#boot .card{position:absolute;left:max(18px,8vw);bottom:calc(24vh + 46px);width:min(330px,calc(100% - 36px));display:flex;align-items:flex-end;gap:14px}
+#boot .dia{flex:none;width:58px;height:58px}
+#boot .bplate{flex:1;min-width:0}
+#boot .msg{display:inline-block;background:#f7f7f2;color:#141414;font-weight:700;font-size:15px;line-height:1.3;padding:7px 10px;border:2px solid #141414;border-radius:2px;letter-spacing:.04em}
+#boot .wire{display:flex;align-items:center;gap:8px;margin-top:10px}
+#boot .rope{position:relative;flex:1;height:4px;border-radius:2px;background:repeating-linear-gradient(90deg,#6c6f73 0 5px,#3d3f42 5px 8px)}
+#boot .rope i{position:absolute;left:0;top:-1px;bottom:-1px;width:0;border-radius:3px;background:#ffb23a;box-shadow:0 0 8px #ff8a2a;transition:width .25s ease-out}
+#boot .rope i::after{content:"";position:absolute;right:-5px;top:-3px;width:10px;height:10px;border-radius:50%;background:#ffd27a;box-shadow:0 0 10px #ffb23a}
+#boot .pct{font-family:'Barlow Condensed','BIZ UDPGothic',sans-serif;font-weight:700;font-size:20px;min-width:3.2em;text-align:right;font-variant-numeric:tabular-nums}
+#boot-err{position:absolute;left:12px;right:12px;bottom:12px;z-index:2;background:#f7f7f2;color:#141414;font:13px/1.5 'BIZ UDPGothic',sans-serif;padding:12px;border:2px solid #141414;border-radius:2px}
+#boot-err b{display:block;font-size:15px;color:#b3200a}
+#boot-err pre{margin:6px 0 8px;font:11px/1.4 monospace;white-space:pre-wrap;max-height:30vh;overflow:auto;color:#444}
+#boot-err button{min-height:44px;padding:0 16px;background:#e8521c;color:#fff;font:700 14px 'BIZ UDPGothic',sans-serif;border:0;border-radius:4px}
+@keyframes bslide{to{transform:translateX(-50%)}}
+@keyframes bglow{from{opacity:.65}to{opacity:1}}
+@keyframes bpop{0%{transform:scale(0)}70%{transform:scale(1);opacity:1}82%{transform:scale(1.12,.9);opacity:1}86%,100%{transform:scale(1.2);opacity:0}}
+@keyframes bring{0%,82%{opacity:0;transform:scale(.6)}86%{opacity:1}100%{opacity:0;transform:scale(1.8)}}
+@media (orientation:portrait){#boot .card{bottom:auto;top:36vh}#boot .city{width:min(560px,100vw)}}
+@media (orientation:landscape) and (max-height:500px){#boot .pool{height:20vh}#boot .crest{bottom:calc(20vh - 13px)}#boot .bub{bottom:calc(20vh - 10px)}#boot .card{bottom:calc(20vh + 26px)}#boot .city{bottom:calc(20vh - 4px);width:min(460px,60vw)}}
+@media (prefers-reduced-motion:reduce){#boot .crest,#boot .glow,#boot .hk,#boot .bub,#boot .bub::after{animation:none}}
 </style>
-<link rel="stylesheet" href="style.css?v=5">
-<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+<link rel="stylesheet" href="style.css?v=6">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+<!-- 読み込みの鎖（game.js → 中の import → three）を待たずに並べて取る -->
+<link rel="modulepreload" href="js/game.js?v=6">
+<link rel="modulepreload" href="vendor/three.module.min.js">
+<link rel="modulepreload" href="vendor/three.core.min.js">
+<link rel="modulepreload" href="js/charmodel.js?v=6">
+<link rel="modulepreload" href="vendor/jsm/loaders/GLTFLoader.js">
 </head>
 <body>
+<div id="boot" role="status" aria-live="polite">
+  <div class="glow"></div>
+  <svg class="city" viewBox="0 0 400 220" preserveAspectRatio="xMaxYMax meet" aria-hidden="true"><path d="M150 220V128h34v-18h22v110zM214 220V84h40v136zM262 220v-62h18v-28h30v90zM318 220V104h46v116zM370 220v-74h30v74z" fill="#1f0d08"/><path d="M226 98h6v8h-6zM240 98h6v8h-6zM226 118h6v8h-6zM330 118h6v8h-6zM346 132h6v8h-6zM330 146h6v8h-6z" fill="#ff9a3a" opacity=".55"/><path d="M96 220V70" stroke="#1f0d08" stroke-width="6"/><path d="M96 74h26" stroke="#1f0d08" stroke-width="5"/><circle class="hk" cx="122" cy="80" r="5" fill="#ffd27a"/></svg>
+  <div class="pool"><div class="crust"></div></div>
+  <div class="crest"><svg viewBox="0 0 400 28" preserveAspectRatio="none" aria-hidden="true"><path d="M0 14C25 4 50 4 75 14S125 24 150 14 175 4 200 14 250 24 275 14 325 4 350 14 375 24 400 14V28H0Z" fill="#ff8a2a"/><path d="M0 14C25 4 50 4 75 14S125 24 150 14 175 4 200 14 250 24 275 14 325 4 350 14 375 24 400 14" fill="none" stroke="#ffd27a" stroke-width="2"/></svg></div>
+  <i class="bub" style="left:14%;--s:16px;--d:2.6s;--w:-.4s"></i><i class="bub" style="left:31%;--s:26px;--d:3.4s;--w:-1.9s"></i><i class="bub" style="left:52%;--s:12px;--d:2.1s;--w:-1.1s"></i><i class="bub" style="left:71%;--s:30px;--d:3.9s;--w:-2.7s"></i><i class="bub" style="left:88%;--s:18px;--d:2.9s;--w:-.2s"></i>
+  <div class="card">
+    <svg class="dia" viewBox="0 0 120 120" aria-hidden="true"><rect x="18" y="18" width="84" height="84" rx="8" transform="rotate(45 60 60)" fill="#f6c21c" stroke="#141414" stroke-width="5"/><path d="M30 76c8-2 12-8 16-17 5-12 17-17 28-12-8 1-12 6-11 13 1 5 6 7 11 5 2 6-1 11-7 13H30z" fill="#141414"/><path d="M28 82h64" stroke="#141414" stroke-width="4"/></svg>
+    <div class="bplate">
+      <p class="msg" id="bootMsg">街にフックを掛けています</p>
+      <div class="wire"><div class="rope"><i id="bootBar"></i></div><b class="pct" id="bootPct">0%</b></div>
+    </div>
+  </div>
+</div>
 <div id="view"></div>
 <div id="heat" aria-hidden="true"></div>
 <div id="engulf" aria-hidden="true"></div>
@@ -58,7 +109,6 @@ button,canvas{touch-action:manipulation}
       <a class="mini" href="https://tom3games.github.io/" data-t="more"></a>
     </div>
   </div>
-  <p id="loading" class="loading" data-t="loading"></p>
 </main>
 
 <!-- 遊び方: 白い補助標識 -->
@@ -134,18 +184,69 @@ button,canvas{touch-action:manipulation}
   window.addEventListener('keydown',function(e){if((e.ctrlKey||e.metaKey)&&['+','-','=','0',';'].indexOf(e.key)>=0)e.preventDefault()});
 })();
 (function(){
-  var errs=[];
-  window.addEventListener('error',function(e){errs.push((e.message||'error')+' @'+(e.filename||'')+':'+(e.lineno||''))});
-  window.addEventListener('unhandledrejection',function(e){errs.push('reject: '+(e.reason&&e.reason.message||e.reason))});
-  setTimeout(function(){
-    if(window.__magmaReady) return;
+  // 読み込み中の画面。進み具合は本物の読み込み（下の一覧のファイルが届いた量）から出す
+  // 一覧はゲームが最初に読む物全部。増やしたら足す（verify.mjs が漏れを見る）。重さは gzip 後の KB
+  var lang=null;try{lang=localStorage.getItem('ms.lang')}catch(e){}
+  if(!lang)lang=/^ja/.test(navigator.language||'ja')?'ja':'en';
+  var TX=lang==='ja'?{msg:'街にフックを掛けています',err:'起動できませんでした',stall:'読み込みが止まっています。電波のいい所で',retry:'もう一度読み込む'}:{msg:'Rigging hooks over the lava',err:'Failed to start',stall:'Loading has stalled. Check your connection',retry:'Reload'};
+  document.getElementById('bootMsg').textContent=TX.msg;if(lang!=='ja')document.documentElement.lang='en';
+  var FILES={'vendor/three.core.min.js':101,'vendor/three.module.min.js':87,'js/game.js':21,'vendor/jsm/loaders/GLTFLoader.js':25,'vendor/jsm/utils/BufferGeometryUtils.js':9,'shared/sim.js':6,'js/charmodel.js':4,'vendor/jsm/utils/SkeletonUtils.js':3,'js/data.js':3,'sfx.js':3};
+  var GLB={'Ranger.glb':[212,457652],'Rig_Medium_General.glb':[53,139196],'Rig_Medium_MovementBasic.glb':[40,127208]};
+  var got={},total=0,k,shown=0,lastMove=Date.now(),done=false,failed=false,errs=[];
+  window.__bootFiles=Object.keys(FILES).concat(Object.keys(GLB));
+  for(k in FILES)total+=FILES[k];for(k in GLB)total+=GLB[k][0];
+  var bar=document.getElementById('bootBar'),pct=document.getElementById('bootPct'),boot=document.getElementById('boot');
+  function draw(){
+    var sum=0,f;for(f in got)sum+=got[f];
+    var v=Math.min(done?100:99,Math.floor(sum/total*100));
+    if(v>shown){shown=v;lastMove=Date.now();bar.style.width=v+'%';pct.textContent=v+'%'}
+  }
+  window.__bootProgress=function(){return shown};
+  function seen(name){var path=name.split('?')[0];for(var f in FILES){if(path.slice(-f.length-1)==='/'+f&&!got[f]){got[f]=FILES[f];draw()}}}
+  try{
+    new PerformanceObserver(function(l){l.getEntries().forEach(function(e){seen(e.name)})}).observe({type:'resource',buffered:true});
+  }catch(e){}
+  // 人物の 3D（全体の半分）はここで先に取り、届いた量をそのまま進み具合にする。charmodel.js がこれを使う
+  window.__bootGlb={};
+  Object.keys(GLB).forEach(function(f){
+    var w=GLB[f][0],size=GLB[f][1];
+    window.__bootGlb[f]=new Promise(function(ok,ng){
+      var x=new XMLHttpRequest();x.open('GET','assets/chars/'+f);x.responseType='arraybuffer';
+      x.onprogress=function(e){got[f]=w*Math.min(1,e.lengthComputable&&e.total?e.loaded/e.total:e.loaded/size);draw()};
+      x.onload=function(){got[f]=w;draw();if(x.status>=200&&x.status<300&&x.response)ok(x.response);else ng(new Error(x.status+' '+f))};
+      x.onerror=function(){got[f]=w;draw();ng(new Error('network '+f))};
+      x.send();
+    });
+    window.__bootGlb[f].catch(function(){});
+  });
+  function fail(title,detail){
+    if(done||failed)return;failed=true;
+    try{performance.getEntriesByType('resource').forEach(function(e){if(e.responseStatus>=400)detail=(detail?detail+'\n':'')+e.responseStatus+' '+e.name})}catch(e){}
     var d=document.createElement('div');d.id='boot-err';
-    d.textContent='起動できませんでした / failed to start\n'+(errs.join('\n')||'(no error captured)')+'\n'+navigator.userAgent;
-    document.body.appendChild(d);
-  },8000);
+    var b=document.createElement('b');b.textContent=title;
+    var pre=document.createElement('pre');pre.textContent=(detail||'')+'\n'+navigator.userAgent;
+    var btn=document.createElement('button');btn.textContent=TX.retry;btn.onclick=function(){location.reload()};
+    d.appendChild(b);d.appendChild(pre);d.appendChild(btn);boot.appendChild(d);boot.classList.remove('out');boot.hidden=false;
+  }
+  window.__bootFail=fail;
+  // ファイルが届かない（404 など）・起動中のエラーは、その場で起動失敗の表示を出す
+  window.addEventListener('error',function(e){
+    var t=e.target;
+    if(t&&t!==window&&(t.tagName==='SCRIPT'||(t.tagName==='LINK'&&/stylesheet|modulepreload/.test(t.rel)&&!/fonts\./.test(t.href)))){errs.push('load failed: '+(t.src||t.href));if(!window.__magmaLoaded)fail(TX.err,errs.join('\n'));return}
+    errs.push((e.message||'error')+' @'+(e.filename||'')+':'+(e.lineno||''));
+    if(!window.__magmaLoaded)fail(TX.err,errs.join('\n'));
+  },true);
+  window.addEventListener('unhandledrejection',function(e){errs.push('reject: '+(e.reason&&e.reason.message||e.reason));if(!window.__magmaLoaded)fail(TX.err,errs.join('\n'))});
+  // 30 秒進まなければ止まっていると知らせる（遅い回線でも進んでいる間は待つ）
+  var iv=setInterval(function(){if(done){clearInterval(iv);return}if(Date.now()-lastMove>30000){clearInterval(iv);fail(TX.stall,errs.join('\n'))}},1000);
+  // ゲームの準備が全部終わったら（game.js が呼ぶ）、100% を見せてから消す
+  window.__bootDone=function(){
+    if(done||failed)return;done=true;for(var f in FILES)got[f]=FILES[f];for(f in GLB)got[f]=GLB[f][0];draw();
+    setTimeout(function(){boot.classList.add('out');setTimeout(function(){boot.hidden=true},380)},180);
+  };
 })();
 </script>
-<script src="sfx.js?v=5"></script>
-<script type="module" src="js/game.js?v=5"></script>
+<script src="sfx.js?v=6"></script>
+<script type="module" src="js/game.js?v=6"></script>
 </body>
 </html>

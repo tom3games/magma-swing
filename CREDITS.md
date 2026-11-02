@@ -1,4 +1,4 @@
-- snd/lava_loop.mp3: 100 CC0 SFX #2 / rubberduck / CC0
+- snd/lava_loop.wav: File:WWS Fireoftheforge.ogg / Work With Sounds / La Fonderie / CC BY 4.0（0.6倍速・低音だけにして継ぎ目なしのループにした溶岩の音。2026-11-03 までの せせらぎ loop_water_02 は水に聞こえるので外した）
 - snd/fire_wave.mp3: File:WWS Fireoftheforge.ogg / Work With Sounds / La Fonderie / CC BY 4.0
 - snd/shot.mp3: 50 RPG sound effects / Kenney / CC0
 - snd/hook1.mp3: 100 CC0 SFX #2 / rubberduck / CC0
@@ -30,4 +30,4 @@
 - snd/empty.mp3: Interface Sounds / Kenney / CC0
 - snd/rumble.mp3: 100 CC0 SFX #2 / rubberduck / CC0
 - snd/crumble.mp3: 75 CC0 breaking / falling / hit sfx / rubberduck / CC0
-- snd/air_loop.mp3: 100 CC0 SFX #2 / rubberduck / CC0（風の環境音）
+- snd/wind_loop.wav: Howling wind / Tvabutzku1234 / CC0（Wikimedia Commons。風の環境音・継ぎ目なしのループ）

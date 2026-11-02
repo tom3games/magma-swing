@@ -4,7 +4,7 @@
 //   Snd.def({ door: ['snd/door1.mp3','snd/door2.mp3'], ding: 'snd/ding.mp3', ... })  起動時に1回
 //   最初のタップで Snd.init()  （iOS は操作の中でしか鳴らない）
 //   Snd.play('door', { vol: 0.8, rate: 1, jitter: 0.06, dest: 'muf' })  差分からランダム・同じ物を連続で選ばない・ピッチを少し揺らす
-//   Snd.loop('amb', 'snd/elevator_hum.mp3', 0.25)  環境音・BGM（同じ名前で呼ぶと差し替え、null で止める）
+//   Snd.loop('amb', 'snd/elevator_hum.mp3', 0.25)  環境音・BGM（ループは WAV か頭と最後の無音を除いて回す）（同じ名前で呼ぶと差し替え、null で止める）
 //   Snd.duck(0.4, 1.2)  見せ場の間だけ BGM と環境音を下げる
 //   検証は Snd.played（鳴らした回数）と Snd.level()
 const Snd = {
@@ -55,10 +55,17 @@ const Snd = {
     const start = () => {
       const buf = this.bufs[url]; if (!buf || buf === 'loading') return setTimeout(start, 120)
       if (this.loops[slot] && this.loops[slot].url !== url) return
-      const s = c.createBufferSource(), g = c.createGain(); s.buffer = buf; s.loop = true; s.playbackRate.value = rate; g.gain.setValueAtTime(0.0001, c.currentTime); g.gain.linearRampToValueAtTime(vol, c.currentTime + fade)
-      s.connect(g); g.connect(this.bed); s.start(); this.loops[slot] = { url, vol, node: s, g }; this.played['loop:' + slot] = (this.played['loop:' + slot] || 0) + 1
+      const s = c.createBufferSource(), g = c.createGain(), [a, b] = this.edges(buf); s.buffer = buf; s.loop = true; s.loopStart = a; s.loopEnd = b; s.playbackRate.value = rate; g.gain.setValueAtTime(0.0001, c.currentTime); g.gain.linearRampToValueAtTime(vol, c.currentTime + fade)
+      s.connect(g); g.connect(this.bed); s.start(0, a); this.loops[slot] = { url, vol, node: s, g }; this.played['loop:' + slot] = (this.played['loop:' + slot] || 0) + 1
     }
     if (!this.bufs[url]) this.load(); start()
+  },
+  // mp3 は頭と最後に無音（エンコーダーの詰め物）が入り、そのまま回すと継ぎ目でプツッ・シュッと鳴る。ループは無音を除いた所だけを回す
+  edges(buf) {
+    if (buf._edges) return buf._edges
+    const d = buf.getChannelData(0), n = d.length, lim = Math.min(n >> 2, Math.floor(buf.sampleRate * 0.1)), th = 1e-4
+    let i = 0, j = n - 1; while (i < lim && Math.abs(d[i]) < th) i++; while (j > n - 1 - lim && Math.abs(d[j]) < th) j--
+    return (buf._edges = [i / buf.sampleRate, (j + 1) / buf.sampleRate])
   },
   duck(to = 0.4, sec = 1) { if (!this.ctx) return; const g = this.bed.gain, t = this.ctx.currentTime; g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(to, t + 0.08); g.linearRampToValueAtTime(1, t + sec) },
   level() { if (!this.an) return 0; const d = new Float32Array(this.an.fftSize); this.an.getFloatTimeDomainData(d); let m = 0; for (const v of d) m = Math.max(m, Math.abs(v)); return m },

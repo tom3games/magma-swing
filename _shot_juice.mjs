@@ -10,7 +10,7 @@ for (const [name, vp] of [['phone', { width: 390, height: 844 }], ['land', { wid
   const ctx = await b.newContext({ locale: 'ja-JP', viewport: vp, hasTouch: true }); await muteContext(ctx)
   await ctx.addInitScript(() => { try { localStorage.setItem('ms.tut', '1'); localStorage.setItem('ms.intro', '1') } catch (e) {} })
   const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => m.type() === 'error' && errs.push(m.text()))
-  await p.goto(`http://localhost:${PORT}/`); await p.waitForFunction(() => window.__magmaReady && document.getElementById('loading').hidden, null, { timeout: 30000 })
+  await p.goto(`http://localhost:${PORT}/`); await p.waitForFunction(() => window.__magmaLoaded && document.getElementById('boot').hidden, null, { timeout: 30000 })
   await p.evaluate(() => magma.start(3))
   const info = await p.evaluate(() => {
     const m = magma.sim, g = magma.g, B = m.makeBot(1, 3); magma.dbg.pause(true)

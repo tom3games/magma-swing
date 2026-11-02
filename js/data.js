@@ -30,7 +30,6 @@ export const T = {
     lines: [[0, 'スタートの屋上がいちばん安全だった'], [80, 'ワイヤーより先に重力が来た'], [250, '溶岩も「まだ遊べる」と言っている'], [600, 'このあたりで手が汗ばんでくる'], [1200, '地元のマグマにはもう顔を覚えられた'], [2500, '溶岩が本気を出し始めた距離'], [5000, 'もう地面のことは忘れていい']],
     postText: (m) => `地面はマグマ、${m}m 逃げた。`,
     credits: '音: Work With Sounds / La Fonderie (CC BY 4.0) ほか CC0',
-    loading: '準備中',
   },
   en: {
     docTitle: 'MAGMA SWING | The floor is lava, swing on wires',
@@ -62,6 +61,5 @@ export const T = {
     lines: [[0, 'The starting roof was the safest place'], [80, 'Gravity arrived before the wire'], [250, 'The lava says you can keep playing'], [600, 'Hands start sweating around here'], [1200, 'The local lava knows your face now'], [2500, 'This is where the lava gets serious'], [5000, 'You can forget the ground exists']],
     postText: (m) => `The floor is lava. I swung ${m}m.`,
     credits: 'Sound: Work With Sounds / La Fonderie (CC BY 4.0) and CC0',
-    loading: 'Loading',
   },
 }

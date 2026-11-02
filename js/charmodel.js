@@ -26,7 +26,8 @@ function recolor(img) {
 export function loadCharAssets() {
   if (A.loading) return A.loading
   const L = new GLTFLoader()
-  const get = f => new Promise((ok, ng) => L.load(BASE + f, ok, undefined, ng))
+  const pre = window.__bootGlb || {}   // 読み込み中の画面が先に取っている（進み具合を出すため）
+  const get = f => pre[f] ? pre[f].then(ab => new Promise((ok, ng) => L.parse(ab, BASE, ok, ng))) : new Promise((ok, ng) => L.load(BASE + f, ok, undefined, ng))
   A.loading = Promise.all([get('Ranger.glb'), get('Rig_Medium_General.glb'), get('Rig_Medium_MovementBasic.glb')])
     .then(([r, g1, g2]) => {
       r.scene.traverse(o => {

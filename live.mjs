@@ -14,7 +14,7 @@ for (const [name, bt, opts] of [['chromium', chromium, {}], ['webkit', webkit, {
   p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()) })
   p.on('requestfailed', r => { if (!/fonts\./.test(r.url())) errs.push('fail ' + r.url()) })
   await p.goto(URL0 + '?t=' + Date.now(), { waitUntil: 'networkidle' })
-  await p.waitForFunction(() => window.__magmaReady && document.getElementById('loading').hidden, null, { timeout: 20000 })
+  await p.waitForFunction(() => window.__magmaLoaded && document.getElementById('boot').hidden, null, { timeout: 20000 })
   if (opts.hasTouch) await p.tap('#btnStart'); else await p.click('#btnStart')
   // 始まりの演出（振り返って津波を見る）が終わるまで待つ
   await p.waitForTimeout(300); const intro = await p.evaluate(() => ({ mode: magma.mode, warn: document.getElementById('warn').hidden ? '' : document.getElementById('warnText').textContent }))
