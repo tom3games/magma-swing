@@ -16,7 +16,7 @@ Snd.def({
   shot: 'snd/shot.mp3', hook: ['snd/hook1.mp3', 'snd/hook2.mp3'], swish: ['snd/swish1.mp3', 'snd/swish2.mp3', 'snd/swish3.mp3', 'snd/swish5.mp3'],
   wind: 'snd/wind.mp3', land: ['snd/land1.mp3', 'snd/land2.mp3'], thud: ['snd/thud1.mp3', 'snd/thud2.mp3'], cloth: 'snd/cloth.mp3',
   splash: ['snd/splash1.mp3', 'snd/splash2.mp3'], boom: 'snd/boom.mp3', miss: 'snd/miss.mp3', click: 'snd/click.mp3', ok: 'snd/ok.mp3',
-  j_over: 'snd/j_over.mp3', j_best: 'snd/j_best.mp3',
+  j_over: 'snd/j_over.mp3', j_best: 'snd/j_best.mp3', reel: ['snd/reel1.mp3', 'snd/reel2.mp3'], empty: 'snd/empty.mp3',
 })
 const bgm = name => Snd.loop('bgm', name ? `snd/${name}.mp3` : null, name === 'bgm_play' ? 0.32 : 0.36)
 function soundStart() {
@@ -26,7 +26,7 @@ function soundStart() {
 
 // ---------- 描画の土台
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
-renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2))
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, matchMedia('(pointer:coarse)').matches ? 1.5 : 2))   // スマホは塗る画素を減らす（2026-11-02 重いと言われた）
 renderer.outputColorSpace = THREE.SRGBColorSpace
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap
@@ -38,7 +38,7 @@ const hemi = new THREE.HemisphereLight(0xcfe3ff, 0xff6a2a, 1.1); scene.add(hemi)
 const sun = new THREE.DirectionalLight(0xfff1dc, 2.2); sun.castShadow = true
 sun.shadow.mapSize.set(1024, 1024); Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12, near: 1, far: 80 }); sun.shadow.bias = -0.0006
 scene.add(sun, sun.target)
-const under = new THREE.PointLight(0xff5a1a, 30, 22, 1.6); scene.add(under)   // マグマの照り返し
+// マグマの照り返しは半球光の地面色（橙）だけで出す。点光源は重いので使わない（2026-11-02 本人「マグマが重たい」）
 
 // 空（上下2色のグラデーション。時間で色が変わる）
 const skyU = { top: { value: new THREE.Color(0x6fa8dc) }, bot: { value: new THREE.Color(0xf2d9b0) } }
@@ -49,28 +49,21 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(800, 24, 12), new THREE.Shad
 }))
 scene.add(sky)
 
-// マグマ（動く模様）
-const lavaU = { time: { value: 0 }, fogC: { value: new THREE.Color() }, camP: { value: new THREE.Vector3() }, night: { value: 0 } }
-const lava = new THREE.Mesh(new THREE.PlaneGeometry(700, 700, 1, 1).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
-  uniforms: lavaU, fog: false,
-  vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
-  fragmentShader: `uniform float time; uniform vec3 fogC; uniform vec3 camP; uniform float night; varying vec3 vW;
-    float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
-    float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
-    float fbm(vec2 p){ float s=0., a=.5; for(int i=0;i<5;i++){ s+=a*n(p); p=p*2.03+vec2(1.7,9.2); a*=.5; } return s; }
-    void main(){
-      vec2 p = vW.xz*0.06;
-      float q = fbm(p + vec2(time*0.05, -time*0.03));
-      float r = fbm(p*1.7 + q*2.2 + vec2(-time*0.08, time*0.04));
-      float crack = smoothstep(0.42, 0.62, r);
-      vec3 crust = mix(vec3(0.10,0.03,0.02), vec3(0.22,0.07,0.03), q);
-      vec3 hot = mix(vec3(1.0,0.32,0.04), vec3(1.0,0.78,0.30), smoothstep(0.62,0.85,r));
-      vec3 c = mix(crust, hot*(1.6+night*0.8), crack);
-      float d = length(vW - camP);
-      float f = smoothstep(80., 420., d);
-      gl_FragColor = vec4(mix(c, fogC, f*0.85), 1.);
-    }`,
-}))
+// マグマ（簡易版）。2026-11-02 本人「処理重たい。簡易的なやつで、周りの雰囲気に合わせて」
+// 前はノイズを10回重ねるシェーダで、ソフト描画の計測で1コマ 5.5ms。いまは小さい絵を敷いてずらすだけ。霧にも馴染む
+function lavaTex() {
+  // 冷えて黒くなった表面に、ところどころ赤い光がにじむだけ。線は描かない（落書きに見える）
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d')
+  x.fillStyle = '#4a1d12'; x.fillRect(0, 0, 256, 256)
+  let s = 9; const r = () => (s = (s * 16807) % 2147483647) / 2147483647
+  const blob = (cx, cy, rad, col) => { for (const ox of [-256, 0, 256]) for (const oy of [-256, 0, 256]) { const g = x.createRadialGradient(cx + ox, cy + oy, 0, cx + ox, cy + oy, rad); g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(cx + ox - rad, cy + oy - rad, rad * 2, rad * 2) } }
+  for (let i = 0; i < 40; i++) blob(r() * 256, r() * 256, 18 + r() * 40, `rgba(${10 + r() * 20 | 0},${4 + r() * 6 | 0},${3 + r() * 4 | 0},.55)`)   // むら
+  for (let i = 0; i < 16; i++) blob(r() * 256, r() * 256, 16 + r() * 30, `rgba(${220 + r() * 35 | 0},${60 + r() * 60 | 0},20,.7)`)   // にじむ赤
+  for (let i = 0; i < 10; i++) blob(r() * 256, r() * 256, 5 + r() * 9, 'rgba(255,200,100,.85)')   // 小さい明るい点
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(14, 14); return t
+}
+const lavaMat = new THREE.MeshBasicMaterial({ map: lavaTex(), color: 0xffffff })
+const lava = new THREE.Mesh(new THREE.PlaneGeometry(700, 700, 1, 1).rotateX(-Math.PI / 2), lavaMat)
 lava.position.y = 0
 scene.add(lava)
 
@@ -88,23 +81,26 @@ function windowTex(seed, lit) {
   if (!lit) { x.fillStyle = 'rgba(0,0,0,.18)'; x.fillRect(0, 200, 128, 56) }   // 下の方は熱で煤けている
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t
 }
-const bMats = [0, 1, 2, 3].map(i => new THREE.MeshStandardMaterial({ map: windowTex(i + 3), emissiveMap: windowTex(i + 11, true), emissive: 0xffffff, emissiveIntensity: 0, roughness: 0.85 }))
+const bMats = [0, 1, 2, 3].map(i => new THREE.MeshLambertMaterial({ map: windowTex(i + 3), emissiveMap: windowTex(i + 11, true), emissive: 0xffffff, emissiveIntensity: 0 }))   // 遠景のビルは Lambert で軽く
 const unitBox = new THREE.BoxGeometry(1, 1, 1)
-const city = []
+// 70棟を材質ごとの InstancedMesh 4つで描く（前は1棟1回で 62 回描いていて、ソフト描画の計測で 8ms かかっていた）
+for (const m of bMats) m.map.repeat.set(2, 5)
+const city = []   // { side, w, h, d, off, x, y, z, mat, slot }
+const cityIM = bMats.map(m => { const im = new THREE.InstancedMesh(unitBox, m, 18); im.count = 0; im.frustumCulled = false; scene.add(im); return im })
+const _m4 = new THREE.Matrix4(), _q0 = new THREE.Quaternion(), _p0 = new THREE.Vector3(), _s0 = new THREE.Vector3()
+function putBuilding(b) { _m4.compose(_p0.set(b.x, b.y, b.z), _q0, _s0.set(b.w, b.h, b.d)); cityIM[b.mat].setMatrixAt(b.slot, _m4); cityIM[b.mat].instanceMatrix.needsUpdate = true }
 {
   let r = 12345; const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647
   for (let i = 0; i < 70; i++) {
-    const side = i % 2 ? 1 : -1
-    const m = new THREE.Mesh(unitBox, bMats[i % 4])
+    const side = i % 2 ? 1 : -1, mat = i % 4
     const w = 10 + rnd() * 14, d = 10 + rnd() * 16, h = 10 + rnd() * 38
-    m.scale.set(w, h, d); m.userData = { side, w, h, d, off: 18 + rnd() * 26 + w / 2 }
-    m.position.set(side * m.userData.off, h / 2 - 6, -60 + Math.floor(i / 2) * 22 + rnd() * 6)
-    m.material.map.repeat.set(Math.round(w / 6), Math.round(h / 6))
-    scene.add(m); city.push(m)
+    const off = 18 + rnd() * 26 + w / 2
+    const b = { side, w, h, d, off, mat, slot: cityIM[mat].count++, x: side * off, y: h / 2 - 6, z: -60 + Math.floor(i / 2) * 22 + rnd() * 6 }
+    city.push(b); putBuilding(b)
   }
 }
 function updateCity(z) {
-  for (const m of city) if (m.position.z < z - 80) m.position.z += 35 * 22
+  for (const b of city) if (b.z < z - 80) { b.z += 35 * 22; putBuilding(b) }
 }
 
 // ---------- コースの物（フック・休める屋上）
@@ -184,31 +180,49 @@ function syncCourse(g) {
 function clearCourse() {
   for (const m of hookMeshes.values()) scene.remove(m); hookMeshes.clear()
   for (const m of boxMeshes.values()) scene.remove(m); boxMeshes.clear()
+  for (const m of reelMeshes.values()) scene.remove(m); reelMeshes.clear()
 }
 
 // ワイヤー
 const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 5).translate(0, 0.5, 0).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4, metalness: 0.5 }))
 rope.visible = false; scene.add(rope)
 
-// 溶岩の波（後ろから来る壁）
-const waveU = { time: { value: 0 } }
-const wave = new THREE.Mesh(new THREE.PlaneGeometry(160, 34, 1, 1), new THREE.ShaderMaterial({
-  uniforms: waveU, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
-  vertexShader: 'varying vec2 vU; void main(){ vU = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }',
-  fragmentShader: `uniform float time; varying vec2 vU;
-    float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
-    float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
-    void main(){
-      vec2 p = vec2(vU.x*18., vU.y*4. - time*1.6);
-      float f = n(p) * .6 + n(p*2.1) * .3 + n(p*4.3) * .1;
-      float edge = vU.y + f*0.55;
-      float a = smoothstep(1.0, 0.55, edge);
-      vec3 c = mix(vec3(1.,.85,.4), vec3(.9,.18,.03), smoothstep(0.1, 0.9, vU.y + f*.3));
-      gl_FragColor = vec4(c*1.8, a*0.92);
-    }`,
-}))
+// 溶岩の波（後ろから来る壁）。板1枚＋縦のグラデーションの絵をずらすだけ
+function waveTex() {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 256; const x = c.getContext('2d')
+  const g = x.createLinearGradient(0, 0, 0, 256)
+  g.addColorStop(0, 'rgba(255,140,40,0)'); g.addColorStop(0.25, 'rgba(255,150,50,.75)'); g.addColorStop(0.55, 'rgba(230,70,20,.95)'); g.addColorStop(1, 'rgba(120,25,10,1)')
+  x.fillStyle = g; x.fillRect(0, 0, 64, 256)
+  let s = 5; const r = () => (s = (s * 16807) % 2147483647) / 2147483647
+  for (let i = 0; i < 40; i++) { x.fillStyle = `rgba(255,${200 + r() * 50 | 0},120,${0.15 + r() * 0.25})`; x.fillRect(r() * 64, 60 + r() * 190, 2 + r() * 6, 10 + r() * 30) }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.repeat.set(6, 1); return t
+}
+const waveMat = new THREE.MeshBasicMaterial({ map: waveTex(), transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false })
+const wave = new THREE.Mesh(new THREE.PlaneGeometry(160, 34, 1, 1), waveMat)
 wave.position.y = 15; scene.add(wave)
-const waveLight = new THREE.PointLight(0xff4a10, 0, 60, 1.4); scene.add(waveLight)
+
+// 補充のリール（空中に浮かぶ）。ドラムは回転体1つ（両側の円盤と芯を1つの形に）＋光1枚。描くのは前方 140m だけ
+const reelMeshes = new Map()
+const reelGeo = (() => {
+  const P = [[0, -0.5], [0.75, -0.5], [0.75, -0.38], [0.42, -0.38], [0.42, 0.38], [0.75, 0.38], [0.75, 0.5], [0, 0.5]].map(([x, y]) => new THREE.Vector2(x, y))
+  const g = new THREE.LatheGeometry(P, 14).rotateZ(Math.PI / 2)
+  const col = [], pos = g.attributes.position
+  for (let i = 0; i < pos.count; i++) { const r = Math.hypot(pos.getY(i), pos.getZ(i)), core = r < 0.5 && Math.abs(pos.getX(i)) < 0.39; core ? col.push(0.17, 0.17, 0.17) : col.push(0.79, 0.64, 0.42) }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); return g
+})()
+const reelMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, emissive: 0x6a3a08, emissiveIntensity: 0.35 })
+const reelGlowMat = new THREE.SpriteMaterial({ map: glowTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false, opacity: 0.8 })
+function makeReel(it) {
+  const g = new THREE.Group()
+  const d = new THREE.Mesh(reelGeo, reelMat)
+  const glow = new THREE.Sprite(reelGlowMat); glow.scale.setScalar(3.2)
+  g.add(d, glow); g.position.set(it.x, it.y, it.z); scene.add(g); return g
+}
+function syncItems(g) {
+  const live = new Set(), zMax = g.p.z + 140
+  for (const it of g.C.items) { if (it.taken || it.z > zMax) continue; live.add(it.i); if (!reelMeshes.has(it.i)) reelMeshes.set(it.i, makeReel(it)) }
+  for (const [i, m] of reelMeshes) if (!live.has(i)) { scene.remove(m); reelMeshes.delete(i) }
+}
 
 // 火の粉・しぶき
 const parts = []
@@ -419,12 +433,23 @@ function saveImage() {
 
 // ---------- 出来事から音と演出
 let toastT = 0
+// ワイヤーの残り（ドラムに巻いたワイヤーの量＋本数）
+let reelShown = -1
+function drawReel(n) {
+  if (n === reelShown) return; reelShown = n
+  const el = $('reel'); if (!el) return
+  el.querySelector('b').textContent = n
+  el.querySelector('.wind').setAttribute('r', (6 + Math.min(1, n / K.WIREMAX) * 13).toFixed(1))
+  el.classList.toggle('low', n <= 2); el.classList.toggle('none', n <= 0)
+}
+function bumpReel(up) { const el = $('reel'); if (!el) return; el.classList.remove('bump', 'up'); void el.offsetWidth; el.classList.add(up ? 'up' : 'bump') }
 function toast(s) { $('toast').textContent = s; $('toast').hidden = false; toastT = 1.1 }
 function handleEvents(g) {
   for (const e of g.events) {
     if (e.t === 'wire') { Snd.play('shot', { vol: 0.7 }); setTimeout(() => Snd.play('hook', { vol: 0.6 }), 60); burst(e.x, e.y, e.z, 6, 4, 0xffd27a); if (tut.on && tut.stage === 0) { tut.stage = 1; tut.t = 0 } }
     else if (e.t === 'release') { Snd.play('swish', { vol: Math.min(1, 0.4 + e.v / 30) }); if (e.v > 24) Snd.play('wind', { vol: 0.5 }); if (tut.on && tut.stage === 1) { tut.stage = 2; tut.t = 0 } }
-    else if (e.t === 'miss') { Snd.play('miss', { vol: 0.5, jitter: 0 }); showMiss(e.far) }
+    else if (e.t === 'miss') { if (e.empty) { Snd.play('empty', { vol: 0.6, jitter: 0 }); toast(TT().empty); bumpReel() } else { Snd.play('miss', { vol: 0.5, jitter: 0 }); showMiss(e.far) } }
+    else if (e.t === 'pick') { Snd.play('reel', { vol: 0.8 }); burst(e.x, e.y, e.z, 8, 4, 0xffd27a); bumpReel(true) }
     else if (e.t === 'land') Snd.play('land', { vol: 0.7 })
     else if (e.t === 'cling') { Snd.play('thud', { vol: 0.6 }); Snd.play('cloth', { vol: 0.4 }) }
     else if (e.t === 'jump') Snd.play('cloth', { vol: 0.5 })
@@ -460,13 +485,13 @@ function applyDaytime(f) {
   const k = Math.max(0, Math.min(1, (f - a.at) / (b.at - a.at)))
   const mix = (x, y) => _c1.set(x).lerp(_c2.set(y), k)
   skyU.top.value.copy(mix(a.top, b.top)); skyU.bot.value.copy(mix(a.bot, b.bot))
-  scene.fog.color.copy(mix(a.fog, b.fog)); lavaU.fogC.value.copy(scene.fog.color)
+  scene.fog.color.copy(mix(a.fog, b.fog))
   sun.intensity = a.sun + (b.sun - a.sun) * k; hemi.intensity = a.hemi + (b.hemi - a.hemi) * k
   sun.color.set(f > 0.3 ? 0xffb27a : 0xfff1dc)
   const night = a.night + (b.night - a.night) * k
-  lavaU.night.value = night
+  // マグマは昼は街の色に寄せてくすませ、夜は明るく（光源は使わず色だけ）
+  lavaMat.color.setRGB(0.9 + night * 0.3, 0.8 + night * 0.1, 0.78)
   for (const m of bMats) m.emissiveIntensity = night * 0.75
-  under.intensity = 30 + night * 50
   window.__night = night
 }
 let dayF = 0
@@ -496,7 +521,8 @@ function draw(dt) {
   if (!G) { renderer.render(scene, camera); return }
   const p = G.p
   syncCourse(G)
-  lavaU.time.value += dt; waveU.time.value += dt
+  syncItems(G)
+  lavaMat.map.offset.x += dt * 0.004; lavaMat.map.offset.y += dt * 0.002; waveMat.map.offset.y = (waveMat.map.offset.y - dt * 0.35) % 1
   lava.position.set(p.x, 0, p.z + 100)
   updateCity(p.z)
   // 人物
@@ -524,15 +550,13 @@ function draw(dt) {
   }
   // 溶岩の波
   wave.position.set(p.x, 15, G.waveZ)
-  waveLight.position.set(p.x, 6, G.waveZ + 4)
   const gapW = p.z - G.waveZ
-  waveLight.intensity = 80 * Math.max(0, 1 - gapW / 70)
+  { const t2 = performance.now() / 1000; for (const m of reelMeshes.values()) { m.rotation.y = t2 * 1.8; m.position.y += Math.sin(t2 * 2 + m.position.z) * 0.004 } }
   const heat = Math.max(0, Math.min(1, 1 - (gapW - 6) / 40))
   $('heat').style.opacity = S.mode === 'play' ? heat.toFixed(2) : 0
   if (Snd.ctx && S.mode === 'play') { if (!Snd._fireOn) { Snd._fireOn = true; Snd.loop('fire', 'snd/fire_wave.mp3', 0.0001, 0.3) } const l = Snd.loops.fire; if (l && l.g) l.g.gain.value = 0.05 + heat * 0.7 }
   else if (Snd._fireOn && S.mode !== 'play' && S.mode !== 'over') { Snd._fireOn = false; Snd.loop('fire', null) }
   // 光
-  under.position.set(p.x, 1.5, p.z)
   sun.position.set(p.x + 20, p.y + 40, p.z - 10); sun.target.position.set(p.x, p.y, p.z + 4)
   dayF += ((Math.min(1, p.maxZ / 1600)) - dayF) * Math.min(1, dt * 2)
   applyDaytime(dayF)
@@ -551,11 +575,11 @@ function draw(dt) {
   const fov = 62 + Math.min(14, sp * 0.35)
   camera.fov += (fov - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix()
   sky.position.copy(camera.position)
-  lavaU.camP.value.copy(camera.position)
   updateParts(dt)
   // HUD
   if (S.mode === 'play') {
     $('dist').textContent = Math.round(p.maxZ).toLocaleString()
+    drawReel(p.left)
     // チュートリアル（文字は1つだけ）
     if (tut.on) {
       tut.t += dt
@@ -586,7 +610,7 @@ addEventListener('pointerdown', () => { soundStart(); if (S.mode === 'title') bg
 
 // 検証用の窓口
 window.magma = {
-  get g() { return G }, get mode() { return S.mode }, S, camera, scene,
+  get g() { return G }, get mode() { return S.mode }, S, camera, scene, renderer,
   start: (seed, opts = {}) => { if (opts.easy != null) { S.easy = !!opts.easy; applyLang() } startPlay(seed) },
   showResult: () => { if (G) { G.p.dead = G.p.dead || 'lava'; G.over = true; endPlay() } },
   input: once, setHold: v => { holdDown = v }, setStick: (x, y) => { stick.x = x; stick.y = y },

@@ -25,7 +25,7 @@ body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 button,canvas{touch-action:manipulation}
 #boot-err{position:fixed;inset:auto 8px 8px 8px;z-index:99;background:#fff;color:#b00;font:12px/1.4 monospace;white-space:pre-wrap;padding:10px;border-radius:8px}
 </style>
-<link rel="stylesheet" href="style.css?v=1">
+<link rel="stylesheet" href="style.css?v=2">
 <script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
 </head>
 <body>
@@ -73,6 +73,7 @@ button,canvas{touch-action:manipulation}
 <!-- 遊んでいる間 -->
 <main id="hud" hidden>
   <div class="post" aria-live="off"><b id="dist">0</b><span>m</span></div>
+  <div id="reel" class="reel" aria-label="wire"><svg viewBox="0 0 48 48" aria-hidden="true"><circle class="fl" cx="24" cy="24" r="23"/><circle class="wind" cx="24" cy="24" r="19"/><circle class="ln" cx="24" cy="24" r="13"/><circle class="hub" cx="24" cy="24" r="5"/><circle class="hole" cx="24" cy="24" r="2"/></svg><b>10</b><i data-t="reelUnit"></i></div>
   <div class="hud-r">
     <button id="btnPause" class="mini dark" aria-label="pause">II</button>
   </div>
@@ -136,7 +137,7 @@ button,canvas{touch-action:manipulation}
   },8000);
 })();
 </script>
-<script src="sfx.js?v=1"></script>
-<script type="module" src="js/game.js?v=1"></script>
+<script src="sfx.js?v=2"></script>
+<script type="module" src="js/game.js?v=2"></script>
 </body>
 </html>

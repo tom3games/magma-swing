@@ -25,3 +25,6 @@
 - snd/bgm_title.mp3: Comedy Funny Background Song / Almitory / 複数ライセンスのうち CC0 を選択
 - assets/chars: KayKit Adventurers 2.0 (Kay Lousberg, CC0)
 - three.js (MIT)
+- snd/reel1.mp3: 50 RPG sound effects / Kenney / CC0
+- snd/reel2.mp3: 50 RPG sound effects / Kenney / CC0
+- snd/empty.mp3: Interface Sounds / Kenney / CC0

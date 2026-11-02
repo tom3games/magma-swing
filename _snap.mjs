@@ -23,6 +23,8 @@ for (const [n, w, h, touch] of sizes) {
   await p.evaluate(async () => { const { botInput, makeBot, step } = await import('./shared/sim.js'); const B = makeBot(1, 3); magma.dbg.pause(true); for (let i = 0; i < 60 * 9; i++) { const g = magma.g; if (g.over) break; step(g, botInput(g, B)); g.events.length = 0; if (i % 30 === 0) magma.dbg.step(0) } magma.dbg.pause(false) })
   await p.waitForTimeout(300)
   await p.screenshot({ path: `shots/${n}-swing.png` })
+  await p.evaluate(() => { const g = magma.g; g.p.maxZ = 700; }); await p.waitForTimeout(1500)
+  await p.screenshot({ path: `shots/${n}-dusk.png` })
   await p.evaluate(() => { const g = magma.g; g.p.maxZ = 1500; }); await p.waitForTimeout(1500)
   await p.screenshot({ path: `shots/${n}-night.png` })
   await p.evaluate(() => magma.showResult()); await p.waitForTimeout(1800)

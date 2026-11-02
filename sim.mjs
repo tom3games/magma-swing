@@ -12,12 +12,12 @@ const run = (kind, seed) => {
     else inp = botInput(g, B)
     step(g, inp); g.events.length = 0; n++
   }
-  return { d: Math.round(g.p.maxZ), t: Math.round(g.t), why: g.p.dead, v: Math.round(g.p.maxV * 3.6), chain: g.p.bestChain }
+  return { d: Math.round(g.p.maxZ), t: Math.round(g.t), why: g.p.dead, v: Math.round(g.p.maxV * 3.6), chain: g.p.bestChain, out: g.p.left <= 0, picked: g.p.picked, wires: g.p.wires }
 }
 const S = Number(process.argv[2] || 12)
 for (const kind of ['good', 'bad', 'easy-good', 'easy-bad', 'runner', 'idle']) {
   const rs = Array.from({ length: S }, (_, i) => run(kind, i + 1))
   const ds = rs.map(r => r.d).sort((a, b) => a - b)
   const why = rs.reduce((m, r) => (m[r.why] = (m[r.why] || 0) + 1, m), {})
-  console.log(kind.padEnd(10), 'median', ds[S >> 1], 'min', ds[0], 'max', ds[S - 1], 'time', Math.round(rs.reduce((a, r) => a + r.t, 0) / S) + 's', 'kmh', Math.round(rs.reduce((a, r) => a + r.v, 0) / S), why)
+  console.log(kind.padEnd(10), 'median', ds[S >> 1], 'min', ds[0], 'max', ds[S - 1], 'time', Math.round(rs.reduce((a, r) => a + r.t, 0) / S) + 's', 'kmh', Math.round(rs.reduce((a, r) => a + r.v, 0) / S), why, '切れた', rs.filter(r => r.out).length, '拾った平均', +(rs.reduce((a, r) => a + r.picked, 0) / S).toFixed(1), '掛けた平均', Math.round(rs.reduce((a, r) => a + r.wires, 0) / S))
 }

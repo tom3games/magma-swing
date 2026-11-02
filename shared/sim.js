@@ -16,6 +16,7 @@ export const K = {
   LAVA: 0.25,
   DRAG: 0.004,
   WAVE0: 6, WAVEA: 0.09, WAVEMAX: 30,   // 後ろから来る溶岩の波（m/秒、毎秒これだけ速くなる、上限）
+  WIRE0: 10, WIREMAX: 12, REFILL: 2, PICK: 6.5,   // ワイヤーの残り本数（掛けるたびに1減る）、補充のリールで増える数、拾える距離
   DT: 1 / 60,
 }
 
@@ -24,12 +25,13 @@ export function rng(seed) { let s = (seed >>> 0) || 1; return () => (s = (s * 16
 // コースを前へ伸ばす（無限）。フックの間隔は進むほど広がる
 export function makeCourse(seed) {
   const r = rng(seed)
-  const C = { r, hooks: [], boxes: [], hz: 0, hx: 0, bz: 0, seed }
+  const C = { r, hooks: [], boxes: [], items: [], hz: 0, hx: 0, bz: 0, seed, nid: 0, gaps: 0 }
   C.boxes.push({ x0: -6, x1: 6, z0: -10, z1: 9, y1: 10, start: true })   // スタートの屋上
   C.hz = 4; C.bz = 170
   extend(C, 300)
   return C
 }
+const ITEM_EVERY = 1   // フック何個ごとに補充のリールを1つ置くか
 const KINDS = ['pole', 'lamp', 'sign', 'pole', 'crane', 'sign', 'lamp']
 export function extend(C, toZ) {
   const r = C.r
@@ -40,7 +42,14 @@ export function extend(C, toZ) {
     C.hx = Math.max(-9, Math.min(9, C.hx + (r() - 0.5) * 11))
     const kind = KINDS[Math.floor(r() * KINDS.length)]
     const y = (kind === 'crane' ? 22 : 18) + r() * 5 + Math.min(3, z * 0.002)
-    C.hooks.push({ x: C.hx, y, z: C.hz, kind, i: C.hooks.length })
+    // i は通し番号。前は C.hooks.length にしていて、後ろを捨てた後に番号が重なり、見た目の無いフックができていた（2026-11-02 本人「何もない所に掛かる」）
+    const prev = C.hooks[C.hooks.length - 1]
+    C.hooks.push({ x: C.hx, y, z: C.hz, kind, i: C.nid++ })
+    // 補充のリール: フックの真下あたり、振り子が通る高さ（bot の軌跡を測ると足もと 11〜12m で通る）に浮かべる
+    C.gaps++
+    if (prev && z > 30 && C.gaps % ITEM_EVERY === 0) {
+      C.items.push({ x: C.hx, y: 11.5 + r() * 1.5, z: C.hz - 2 + r() * 4, i: C.nid++ })
+    }
   }
   while (C.bz < toZ) {
     // 休める屋上（沈みかけのビル）。壁に張り付ける
@@ -53,11 +62,12 @@ export function extend(C, toZ) {
 export function trim(C, z) {
   while (C.hooks.length > 4 && C.hooks[0].z < z - 60) C.hooks.shift()
   while (C.boxes.length > 1 && C.boxes[0].z1 < z - 80) C.boxes.shift()
+  while (C.items.length && C.items[0].z < z - 60) C.items.shift()
 }
 
 export function makePlayer() {
   return { x: 0, y: 10, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, grounded: true, rope: null, cling: null, dead: null, wreck: 0, stun: 0,
-    maxZ: 0, maxV: 0, wires: 0, chain: 0, bestChain: 0, airT: 0, lastHook: -1 }
+    maxZ: 0, maxV: 0, wires: 0, left: K.WIRE0, picked: 0, chain: 0, bestChain: 0, airT: 0, lastHook: -1 }
 }
 
 export function makeGame(seed = 1, opts = {}) {
@@ -98,13 +108,14 @@ export function pickHook(g, aim) {
 
 function attach(g, aim) {
   const p = g.p
+  if (p.left <= 0) { g.events.push({ t: 'miss', empty: true }); return false }
   const pk = pickHook(g, aim)
   if (!pk || pk.miss) { g.events.push({ t: 'miss', far: !!(pk && pk.miss), h: pk && pk.h }); return false }
   if (p.grounded) { p.vy = K.JUMP * 0.8; p.grounded = false; p.y += 0.05 }
   p.cling = null
   const h = pk.h
   p.rope = { x: h.x, y: h.y, z: h.z, len: pk.d, h: h.i, t: 0 }
-  p.wires++; if (h.i !== p.lastHook) { p.chain++; p.bestChain = Math.max(p.bestChain, p.chain) }
+  p.wires++; p.left--; if (h.i !== p.lastHook) { p.chain++; p.bestChain = Math.max(p.bestChain, p.chain) }
   p.lastHook = h.i
   g.events.push({ t: 'wire', x: h.x, y: h.y, z: h.z, d: pk.d })
   return true
@@ -226,6 +237,11 @@ export function step(g, inp = {}) {
         g.events.push({ t: 'cling' })
       }
     }
+  }
+  // 補充のリールを拾う
+  for (const it of g.C.items) {
+    if (it.taken || Math.abs(it.z - p.z) > K.PICK + 1) continue
+    if (len3(it.x - p.x, it.y - (p.y + 1), it.z - p.z) < K.PICK) { it.taken = true; const add = Math.min(K.REFILL, K.WIREMAX - p.left); p.left += add; p.picked++; g.events.push({ t: 'pick', x: it.x, y: it.y, z: it.z, add, left: p.left }) }
   }
   const v = Math.hypot(p.vx, p.vy, p.vz)
   p.maxV = Math.max(p.maxV, v)

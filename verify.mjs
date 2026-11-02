@@ -173,6 +173,50 @@ await t('壁に張り付いて上下左右に這える', async () => {
   })
   expect(r.cling && r.up > 1 && r.down > 1 && Math.abs(r.right) > 1 && Math.abs(r.left) > 1 && Math.sign(r.right) !== Math.sign(r.left) && r.topped, JSON.stringify(r)); return r
 })
+await t('掛けられるフックには必ず見える物がある（番号の重なりで見えないフックができていた・2026-11-02 本人「何もない所に掛かる」）', async () => {
+  const r = await p.evaluate(async () => {
+    const m = await import('./shared/sim.js'); magma.start(5); const g = magma.g, B = m.makeBot(1, 5)
+    m.K.WIRE0 = 999; g.p.left = 999
+    magma.dbg.pause(true); let bad = 0, checked = 0, ids = new Set(), dup = 0
+    for (let i = 0; i < 60 * 70; i++) {
+      if (g.over) break
+      m.step(g, m.botInput(g, B)); g.events.length = 0
+      if (i % 60 === 0) {
+        magma.dbg.step(0)
+        for (const h of g.C.hooks) {
+          if (!ids.has(h)) { for (const o of ids) if (o.i === h.i) dup++; ids.add(h) }
+          checked++
+          const vis = magma.scene.children.some(o => o.isGroup && Math.abs(o.position.x - h.x) < 0.01 && Math.abs(o.position.z - h.z) < 0.01 && o.children.some(c => c.isMesh && c.geometry.type === 'TorusGeometry' && Math.abs(c.position.y - h.y) < 0.01))
+          if (!vis) bad++
+        }
+      }
+    }
+    magma.dbg.pause(false); m.K.WIRE0 = 10
+    return { checked, bad, dup, z: Math.round(g.p.maxZ) }
+  })
+  expect(r.checked > 200 && r.bad === 0 && r.dup === 0 && r.z > 600, JSON.stringify(r)); return r
+})
+await t('ワイヤーは有限: 掛けると1本減り、0本だと掛からない。リールを拾うと増える', async () => {
+  const r = await p.evaluate(async () => {
+    const m = await import('./shared/sim.js'); magma.start(6); const g = magma.g; magma.dbg.pause(true)
+    const p0 = g.p.left
+    g.p.grounded = false; g.p.y = 12; g.p.z = 20; g.p.x = g.C.hooks[1].x
+    m.step(g, { wire: true }); const afterWire = g.p.left, roped = !!g.p.rope
+    m.step(g, { wire: true })   // 離す
+    g.p.left = 0; m.step(g, { wire: true }); const emptyMiss = g.events.some(e => e.t === 'miss' && e.empty), ropedEmpty = !!g.p.rope
+    const it = g.C.items.find(q => !q.taken); g.events.length = 0
+    Object.assign(g.p, { x: it.x, y: it.y - 1, z: it.z, vx: 0, vy: 0, vz: 0, rope: null })
+    m.step(g, {}); const afterPick = g.p.left, pickEv = g.events.some(e => e.t === 'pick')
+    magma.dbg.step(0); const hud = document.querySelector('#reel b').textContent
+    magma.dbg.pause(false)
+    return { p0, afterWire, roped, emptyMiss, ropedEmpty, afterPick, pickEv, hud }
+  })
+  expect(r.p0 === 10 && r.afterWire === 9 && r.roped && r.emptyMiss && !r.ropedEmpty && r.afterPick === 2 && r.pickEv, JSON.stringify(r)); return r
+})
+await t('マグマと波は軽い作り（シェーダ・点光源を使わない）', async () => {
+  const r = await p.evaluate(() => { let sh = 0, pl = 0; magma.scene.traverse(o => { if (o.isPointLight) pl++; if (o.material && o.material.isShaderMaterial && o.geometry && o.geometry.parameters && (o.geometry.parameters.width === 700 || o.geometry.parameters.width === 160)) sh++ }); return { sh, pl } })
+  expect(r.sh === 0 && r.pl === 0, JSON.stringify(r)); return r
+})
 await t('マグマに落ちたら終わり、結果に距離と自己ベストが出る', async () => {
   await p.evaluate(() => magma.start(11))
   await p.evaluate(() => { const g = magma.g; Object.assign(g.p, { x: 0, y: 2, z: 120, vx: 0, vy: -3, vz: 0, grounded: false }); g.p.maxZ = 120; g.waveZ = -100 })
