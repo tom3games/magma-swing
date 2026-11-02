@@ -1,8 +1,8 @@
 // 地面はマグマ（MAGMA SWING）の描画と入力。中身の計算は shared/sim.js
 import * as THREE from 'three'
-import { T } from './data.js?v=6'
-import * as SIM from '../shared/sim.js?v=6'
-import { CharRunnerModel, loadCharAssets, charAssets } from './charmodel.js?v=6'
+import { T } from './data.js?v=7'
+import * as SIM from '../shared/sim.js?v=7'
+import { CharRunnerModel, loadCharAssets, charAssets } from './charmodel.js?v=7'
 const { K, makeGame, step, pickHook, botInput, makeBot } = SIM
 
 const $ = id => document.getElementById(id)
@@ -478,7 +478,7 @@ document.addEventListener('pointermove', e => {
   const g = gest.get(e.pointerId); if (!g || g.easy) return
   const dx = e.clientX - g.lx, dy = e.clientY - g.ly; g.lx = e.clientX; g.ly = e.clientY
   if (!g.moved && Math.hypot(e.clientX - g.x, e.clientY - g.y) > 12) g.moved = true
-  if (g.moved) { camYaw = Math.max(-1.4, Math.min(1.4, camYaw - dx * 0.006)); camPitch = Math.max(-0.3, Math.min(0.8, camPitch + dy * 0.004)); camUserT = performance.now() }
+  if (g.moved) { camYaw = Math.max(-1.4, Math.min(1.4, camYaw - dx * 0.0072)); camPitch = Math.max(-0.3, Math.min(0.8, camPitch + dy * 0.0048)); camUserT = performance.now() }
 }, { capture: true })
 const endG = e => {
   const g = gest.get(e.pointerId); if (!g) return; gest.delete(e.pointerId)
