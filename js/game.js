@@ -1,8 +1,8 @@
 // 地面はマグマ（MAGMA SWING）の描画と入力。中身の計算は shared/sim.js
 import * as THREE from 'three'
-import { T } from './data.js?v=3'
-import * as SIM from '../shared/sim.js?v=3'
-import { CharRunnerModel, loadCharAssets, charAssets } from './charmodel.js?v=3'
+import { T } from './data.js?v=4'
+import * as SIM from '../shared/sim.js?v=4'
+import { CharRunnerModel, loadCharAssets, charAssets } from './charmodel.js?v=4'
 const { K, makeGame, step, pickHook, botInput, makeBot } = SIM
 
 const $ = id => document.getElementById(id)
@@ -390,7 +390,7 @@ function startPlay(seed, withIntro = true) {
   if (withIntro) {
     S.mode = 'intro'; intro.t = 0; intro.phase = 0; intro.long = !store.get('ms.intro'); intro.D = intro.long ? 3.2 : 1.8
     $('hud').classList.add('intro'); $('warnSkip').hidden = intro.long; $('warn').hidden = true
-    Snd.play('rumble', { vol: 1, rate: 0.75, jitter: 0 }); Snd.duck(0.3, intro.D)
+    intro.rumbled = !!Snd.play('rumble', { vol: 1, rate: 0.75, jitter: 0 }); Snd.duck(0.3, intro.D)   // 初めてのタップでは音の読み込みが間に合わないことがあるので、読めたら描画の方で鳴らす
   } else endIntro(true)
 }
 function endIntro(silent) {
@@ -661,6 +661,7 @@ function draw(dt) {
   let front = G.waveZ, ia = 0, shake = 0
   if (S.mode === 'intro') {
     intro.t += dt
+    if (!intro.rumbled && intro.t < 1.2 && Snd.ctx && Snd.bufs['snd/rumble.mp3'] && Snd.bufs['snd/rumble.mp3'] !== 'loading') intro.rumbled = !!Snd.play('rumble', { vol: 1, rate: 0.75, jitter: 0, offset: intro.t * 0.75 })
     const sc = intro.D / 3.2, ti = intro.t / sc
     const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x)
     ia = Math.PI * (ti < 2.4 ? ease(ti / 0.8) : 1 - ease((ti - 2.4) / 0.8))

@@ -91,12 +91,14 @@ await t('始まりの演出: 振り返って津波を見せる間は操作が効
     for (let i = 0; i < 40; i++) await new Promise(r => requestAnimationFrame(r))
     // 演出のあとは効く
     magma.input.jump = true; await new Promise(r => setTimeout(r, 250)); magma.input.wire = true; await new Promise(r => setTimeout(r, 120))
-    return { mode0, long, D, skipped, mid, dur: +dur.toFixed(2), after: magma.mode, roped: !!g.p.rope, moved: g.t > 0.2 }
+    const rumble = Snd.played.rumble || 0
+    return { mode0, long, D, skipped, mid, rumble, dur: +dur.toFixed(2), after: magma.mode, roped: !!g.p.rope, moved: g.t > 0.2 }
   })
   // 演出の間: 津波は人の後ろ（カメラは人より後ろ＝津波側を向いて前に出ている）
   expect(r.mode0 === 'intro' && r.long && !r.skipped && r.mid.mode === 'intro' && !r.mid.rope && r.mid.dz === 0 && r.mid.dw === 0 && r.mid.t === 0 && r.mid.warn && r.mid.ctrlOpacity === '0' && r.mid.camZ > 3 && r.mid.front < -45, JSON.stringify(r))
   expect(r.dur > 3 && r.dur < 4 && r.after === 'play' && r.roped && r.moved, JSON.stringify(r))
-  return { dur: r.dur, warn: r.mid.warn, front: r.mid.front, camZ: r.mid.camZ }
+  expect(r.rumble >= 1, 'rumble ' + r.rumble)
+  return { dur: r.dur, warn: r.mid.warn, front: r.mid.front, camZ: r.mid.camZ, rumble: r.rumble }
 })
 await t('2回目からは演出が短く、タップで飛ばせる', async () => {
   await p.evaluate(() => magma.start(12, { intro: true }))
