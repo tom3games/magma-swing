@@ -1,8 +1,8 @@
 // 地面はマグマ（MAGMA SWING）の描画と入力。中身の計算は shared/sim.js
 import * as THREE from 'three'
-import { T } from './data.js?v=4'
-import * as SIM from '../shared/sim.js?v=4'
-import { CharRunnerModel, loadCharAssets, charAssets } from './charmodel.js?v=4'
+import { T } from './data.js?v=5'
+import * as SIM from '../shared/sim.js?v=5'
+import { CharRunnerModel, loadCharAssets, charAssets } from './charmodel.js?v=5'
 const { K, makeGame, step, pickHook, botInput, makeBot } = SIM
 
 const $ = id => document.getElementById(id)
@@ -23,7 +23,7 @@ Snd.def({
 const bgm = name => Snd.loop('bgm', name ? `snd/${name}.mp3` : null, name === 'bgm_play' ? 0.32 : 0.36)
 function soundStart() {
   Snd.init()
-  if (!Snd._beds) { Snd._beds = true; Snd.loop('lava', 'snd/lava_loop.mp3', 0.28, 1, 0.55) }
+  if (!Snd._beds) { Snd._beds = true; Snd.loop('lava', 'snd/lava_loop.mp3', 0.28, 1, 0.55); Snd.loop('air', 'snd/air_loop.mp3', 0.0001, 0.3) }   // 風の環境音（速さで大きく）
 }
 
 // ---------- 描画の土台
@@ -356,6 +356,9 @@ const tut = { on: false, stage: 0, t: 0 }
 // 始まりの演出: 後ろを振り返って津波を見せる。初回 3.2秒（飛ばせない）、2回目からは 1.8秒でタップで飛ばせる
 const intro = { t: 0, D: 3.2, long: true, phase: 0 }
 let engulf = 0, lastRumble = 0
+// 迫力の演出（2026-11-03 本人「空中しっぽ取りの迫力いい。爽快感がある。ワイヤー系は全部」）
+let hitStop = 0, fovKick = 0, flashA = 0, kick = 0, bank = 0, wasNear = false
+function punch(stop, flash, shk, fk) { hitStop = Math.max(hitStop, stop); flashA = Math.max(flashA, flash); kick = Math.max(kick, shk); if (fk) fovKick = fk; window.__punches = (window.__punches || 0) + 1 }
 
 function applyLang() {
   document.documentElement.lang = S.lang
@@ -382,7 +385,7 @@ function startPlay(seed, withIntro = true) {
   const first = !store.get('ms.tut')
   G = makeGame(seed == null ? (Math.random() * 1e9) | 0 : seed, { easy: S.easy, tutorial: first ? 1 : 0 })
   demo = null; clearCourse(); resetCity(); newModelIfNeeded(); if (model) model.group.visible = true
-  S.paused = false; tut.on = first; tut.stage = 0; tut.t = 0; engulf = 0
+  S.paused = false; tut.on = first; tut.stage = 0; tut.t = 0; engulf = 0; hitStop = 0; flashA = 0; kick = 0; fovKick = 0; wasNear = false
   once.wire = once.jump = false; once.aim = null; holdDown = false
   show('hud'); $('holdHint').hidden = true; $('hud').classList.remove('over')
   bgm('bgm_play')
@@ -555,10 +558,10 @@ function toast(s) { $('toast').textContent = s; $('toast').hidden = false; toast
 function handleEvents(g) {
   for (const e of g.events) {
     if (e.t === 'wire') { Snd.play('shot', { vol: 0.7 }); setTimeout(() => Snd.play('hook', { vol: 0.6 }), 60); burst(e.x, e.y, e.z, 6, 4, 0xffd27a); if (tut.on && tut.stage === 0) { tut.stage = 1; tut.t = 0 } }
-    else if (e.t === 'release') { Snd.play('swish', { vol: Math.min(1, 0.4 + e.v / 30) }); if (e.v > 24) Snd.play('wind', { vol: 0.5 }); if (tut.on && tut.stage === 1) { tut.stage = 2; tut.t = 0 } }
+    else if (e.t === 'release') { Snd.play('swish', { vol: Math.min(1, 0.4 + e.v / 30) }); if (e.v > 24) Snd.play('wind', { vol: 0.5 }); if (e.v > 16) fovKick = Math.min(6, (e.v - 16) * 0.3); if (tut.on && tut.stage === 1) { tut.stage = 2; tut.t = 0 } }
     else if (e.t === 'miss') { if (e.empty) { Snd.play('empty', { vol: 0.6, jitter: 0 }); toast(TT().empty); bumpReel() } else { Snd.play('miss', { vol: 0.5, jitter: 0 }); showMiss(e.far) } }
-    else if (e.t === 'pick') { Snd.play('reel', { vol: 0.8 }); burst(e.x, e.y, e.z, 8, 4, 0xffd27a); bumpReel(true) }
-    else if (e.t === 'land') Snd.play('land', { vol: 0.7 })
+    else if (e.t === 'pick') { Snd.play('reel', { vol: 0.8 }); burst(e.x, e.y, e.z, 14, 7, 0xffd27a); bumpReel(true); if (g === G) punch(0.04, 0.35, 0.12, -3) }   // リールを拾った: 一瞬止まって光る
+    else if (e.t === 'land') { Snd.play('land', { vol: 0.7 }); if (g === G && S.mode === 'play') { const v = e.v || 0; punch(v > 12 ? 0.08 : 0.05, v > 12 ? 0.6 : 0.3, Math.min(0.5, 0.15 + v / 50)); burst(G.p.x, G.p.y + 0.2, G.p.z, 12 + Math.min(14, v | 0), 5, 0xd8c8b0) } }   // 屋上に着いた
     else if (e.t === 'cling') { Snd.play('thud', { vol: 0.6 }); Snd.play('cloth', { vol: 0.4 }) }
     else if (e.t === 'jump') Snd.play('cloth', { vol: 0.5 })
     else if (e.t === 'dead') {
@@ -609,7 +612,8 @@ const _v = new THREE.Vector3(), _w = new THREE.Vector3()
 let acc = 0, last = performance.now(), dbgPaused = false
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now
-  if (!dbgPaused) {
+  if (hitStop > 0) { hitStop -= dt; acc = 0 }   // ヒットストップ: ほんの一瞬だけ止める
+  else if (!dbgPaused) {
     acc += dt
     while (acc >= K.DT) { tick(); acc -= K.DT }
   }
@@ -686,6 +690,9 @@ function draw(dt) {
   $('heat').style.opacity = live ? Math.max(heat, S.mode === 'intro' ? 0.35 : 0).toFixed(2) : 0
   if (S.mode === 'play') {
     shake = heat * heat * 0.3
+    // 津波から大きく離した: 30m 未満まで寄られてから 70m 離した瞬間
+    if (gapW < 30) wasNear = true
+    else if (wasNear && gapW > 70) { wasNear = false; punch(0.12, 1, 0.45, -7); toast(TT().escaped); Snd.play('swish', { vol: 1, rate: 0.8, jitter: 0 }); Snd.play('ok', { vol: 0.5 }) }
     if (heat > 0.3 && !window.__noEmbers && Math.random() < heat * 0.45) dotsSpawn(tsuSparks, camera.position.x + (Math.random() - 0.5) * 18, camera.position.y + 2 + Math.random() * 7, camera.position.z + 8 + Math.random() * 12, (Math.random() - 0.5) * 3, -1 - Math.random() * 3, G.waveV + 2 + Math.random() * 4, 1 + Math.random() * 0.6)
   }
   if (p.dead === 'wave') shake = 0.45
@@ -727,12 +734,21 @@ function draw(dt) {
   }
   if (!window.__freeze) {
     camera.position.copy(cam.pos); camera.lookAt(cam.look)
+    kick *= Math.exp(-dt * 6); shake += kick
     if (shake > 0.01 && !window.__noShake) { camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake }
+    // 振り子の向きに少しだけ体ごと傾く（カメラの実際の右向きの速さから）
+    const me = camera.matrixWorld.elements, rl = Math.hypot(me[0], me[2]) || 1, lat = (p.vx * me[0] + p.vz * me[2]) / rl
+    bank += (Math.max(-0.1, Math.min(0.1, (p.rope && S.mode === 'play' ? lat : 0) * -0.004)) - bank) * (1 - Math.exp(-dt * 3))
+    camera.rotateZ(bank)
   }
   // 飲まれた: 津波が画面まで来たら真っ赤に
   $('engulf').style.opacity = p.dead === 'wave' ? Math.max(0, Math.min(1, (front - camera.position.z + 2) / 3)).toFixed(2) : 0
-  const fov = 62 + Math.min(14, sp * 0.35)
-  camera.fov += (fov - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix()
+  const fov = 62 + Math.min(18, Math.max(0, sp - 6) * 0.5)   // 速いほど広く（最大+18度）
+  cam.fov = (cam.fov || 62) + (fov - (cam.fov || 62)) * Math.min(1, dt * 3)
+  fovKick *= Math.exp(-dt * 6)
+  camera.fov = cam.fov + fovKick; camera.updateProjectionMatrix()
+  drawSpeed(S.mode === 'play' && !p.dead ? sp : 0, dt)
+  if (Snd.ctx) { const wl = Snd.loops.air; if (wl && wl.g) wl.g.gain.value = S.mode === 'play' && !p.dead ? Math.min(0.6, Math.max(0, (sp - 6) / 40)) : 0 }   // 風の環境音
   sky.position.copy(camera.position)
   updateParts(dt)
   // HUD
@@ -754,6 +770,32 @@ function draw(dt) {
   }
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').hidden = true }
   renderer.render(scene, camera)
+}
+// 速さの線: 画面のふちから中心へ流れる白い線。速いほど多く濃く（20m/s から）。2D canvas なので軽い
+const spd = $('speedfx'), sctx = spd.getContext('2d'), hf = $('hitflash')
+const lines = Array.from({ length: 46 }, () => ({ a: Math.random() * Math.PI * 2, p: Math.random(), s: 0.6 + Math.random() * 0.8, w: 1 + Math.random() * 2 }))
+let spdOn = false; spd.style.display = 'none'
+function drawSpeed(v, dt) {
+  flashA = Math.max(0, flashA - dt * 5); const fo = flashA.toFixed(2); if (fo !== hf._o) { hf._o = fo; hf.style.opacity = fo; hf.style.display = flashA > 0 ? '' : 'none' }   // 変わった時だけ書く
+  if (window.__speedForce) v = window.__speedForce   // 計測用（_perf.mjs で線を出したまま測る）
+  const k = Math.max(0, Math.min(1, (v - 20) / 18))
+  window.__speedK = k
+  if (k <= 0) { if (spdOn) { sctx.clearRect(0, 0, spd.width, spd.height); spd.style.display = 'none'; spdOn = false } return }   // 出ていない時は層ごと消す（合成の手間も無くす）
+  if (!spdOn) { spd.style.display = ''; spdOn = true }
+  const W = innerWidth, H = innerHeight, dpr = 1   // 線はぼけても分からないので等倍で塗る（スマホの塗る画素を 1/4 に）
+  if (spd.width !== Math.round(W * dpr) || spd.height !== Math.round(H * dpr)) { spd.width = Math.round(W * dpr); spd.height = Math.round(H * dpr) }
+  sctx.setTransform(dpr, 0, 0, dpr, 0, 0); sctx.clearRect(0, 0, W, H)
+  const cx = W / 2, cy = H * 0.45, R = Math.hypot(W, H) * 0.55
+  sctx.lineCap = 'round'
+  const n = Math.round(lines.length * (0.35 + 0.65 * k))
+  for (let i = 0; i < n; i++) {
+    const L = lines[i]
+    L.p += dt * L.s * (1.6 + k * 2.4); if (L.p > 1) { L.p -= 1; L.a = Math.random() * Math.PI * 2 }
+    const r1 = R * (1.05 - L.p * 0.45), r0 = r1 - R * (0.12 + 0.2 * k) * L.s
+    const ca = Math.cos(L.a), sa = Math.sin(L.a)
+    sctx.strokeStyle = `rgba(255,255,255,${(0.1 + 0.32 * k) * Math.min(1, L.p * 4)})`; sctx.lineWidth = L.w
+    sctx.beginPath(); sctx.moveTo(cx + ca * r0, cy + sa * r0); sctx.lineTo(cx + ca * r1, cy + sa * r1); sctx.stroke()
+  }
 }
 function resize() {
   const w = innerWidth, h = innerHeight
@@ -781,6 +823,7 @@ window.magma = {
     step: n => { for (let i = 0; i < n; i++) tick(); draw(K.DT) },
     teleport: (x, y, z) => { Object.assign(G.p, { x, y, z, vx: 0, vy: 0, vz: 0, grounded: false, rope: null, cling: null }) },
     tutorial: () => tut,
+    fx: () => ({ hitStop, flashA, kick, fovKick, bank, fov: camera.fov, speedK: window.__speedK || 0, punches: window.__punches || 0 }),
   },
   aimAt,
 }

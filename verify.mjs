@@ -294,6 +294,59 @@ await t('津波までの距離の表示が正しい・近いと点滅', async ()
   const ok = r.every(([gap, txt, near]) => Number(txt) === Math.round(gap) && near === (Math.round(gap) < 30))
   expect(ok, JSON.stringify(r)); return r.map(x => x.join(':')).join(' ')
 })
+await t('迫力: 速いと速さの線・視野が広がる・風の音が大きく、遅いと出ない（空中しっぽ取り v5 から）', async () => {
+  await p.evaluate(() => magma.start(12))
+  const r = await p.evaluate(() => {
+    magma.dbg.pause(true); const g = magma.g, out = {}
+    for (const [k, v] of [['slow', 8], ['fast', 36]]) {
+      Object.assign(g.p, { grounded: false, y: 14, vx: 0, vy: 0, vz: v }); g.waveZ = g.p.z - 100
+      for (let i = 0; i < 40; i++) { Object.assign(g.p, { y: 14, vy: 0, vz: v }); magma.dbg.step(0) }
+      const c = document.getElementById('speedfx'), cx = c.getContext('2d')
+      let lit = 0; if (c.width) { const d = cx.getImageData(0, 0, c.width, c.height).data; for (let i = 3; i < d.length; i += 4 * 7) if (d[i] > 0) lit++ }
+      const al = Snd.loops.air; out[k] = { ...magma.dbg.fx(), lit, air: al && al.g ? al.g.gain.value : -1 }
+    }
+    magma.dbg.pause(false); return { slowK: out.slow.speedK, fastK: +out.fast.speedK.toFixed(2), slowLit: out.slow.lit, fastLit: out.fast.lit, fovSlow: +out.slow.fov.toFixed(1), fovFast: +out.fast.fov.toFixed(1), airSlow: +out.slow.air.toFixed(2), airFast: +out.fast.air.toFixed(2) }
+  })
+  expect(r.slowK === 0 && r.slowLit === 0 && r.fastK > 0.8 && r.fastLit > 50 && r.fovFast - r.fovSlow > 8 && r.fovFast <= 62 + 18 + 7 && r.airFast > r.airSlow + 0.3, JSON.stringify(r)); return r
+})
+await t('迫力: リール・屋上に着いた・津波を振り切った瞬間に一瞬止まって光る。カメラの傾きは0.1rad以内', async () => {
+  await p.evaluate(() => magma.start(13))
+  const r = await p.evaluate(async () => {
+    const g = magma.g, m = magma.sim, out = {}
+    magma.dbg.pause(true)
+    // リール
+    const it = g.C.items.find(q => !q.taken); Object.assign(g.p, { x: it.x, y: it.y - 1, z: it.z, vx: 0, vy: 0, vz: 0, rope: null, grounded: false }); g.waveZ = g.p.z - 100
+    magma.dbg.step(1); out.pick = { ...magma.dbg.fx() }
+    // 津波を振り切る: 20m まで寄られてから 80m 離す
+    g.waveZ = g.p.z - 20; magma.dbg.step(0); g.waveZ = g.p.z - 80; magma.dbg.step(0); out.esc = { ...magma.dbg.fx(), toast: document.getElementById('toast').textContent }
+    // 実時間でヒットストップ中は sim が止まる
+    magma.dbg.pause(false); const t0 = g.t; await new Promise(r => setTimeout(r, 50)); const tStop = g.t - t0
+    await new Promise(r => setTimeout(r, 400)); const after = magma.dbg.fx()
+    // ワイヤーで振れている間の傾き
+    let maxBank = 0; magma.dbg.pause(true)
+    const h = g.C.hooks.find(q => q.z > g.p.z + 8) || g.C.hooks[3]
+    Object.assign(g.p, { x: h.x + 8, y: h.y - 14, z: h.z - 6, vx: -30, vy: 0, vz: 10, grounded: false, cling: null, rope: { x: h.x, y: h.y, z: h.z, len: 18, t: 0, h: h.i } }); g.waveZ = g.p.z - 100
+    for (let i = 0; i < 90; i++) { magma.dbg.step(1); maxBank = Math.max(maxBank, Math.abs(magma.dbg.fx().bank)) }
+    magma.dbg.pause(false)
+    return { pick: +out.pick.hitStop.toFixed(2), pickFlash: +out.pick.flashA.toFixed(2), esc: +out.esc.hitStop.toFixed(2), escFlash: +out.esc.flashA.toFixed(2), toast: out.esc.toast, tStop: +tStop.toFixed(3), afterStop: +after.hitStop.toFixed(2), afterFlash: +after.flashA.toFixed(2), maxBank: +maxBank.toFixed(3) }
+  })
+  expect(r.pick > 0.02 && r.pickFlash > 0.2 && r.esc >= 0.1 && r.escFlash > 0.9 && r.toast === '振り切った！' && r.tStop < 0.02 && r.afterStop <= 0 && r.afterFlash < 0.05 && r.maxBank > 0.02 && r.maxBank <= 0.1001, JSON.stringify(r)); return r
+})
+await t('迫力: 屋上に着地すると一瞬止まって揺れる', async () => {
+  await p.evaluate(() => magma.start(14))
+  const r = await p.evaluate(() => {
+    const g = magma.g; magma.dbg.pause(true)
+    const b = g.C.boxes.find(q => !q.start) || g.C.boxes[0]; g.waveZ = b.z0 - 100
+    Object.assign(g.p, { x: (b.x0 + b.x1) / 2, y: b.y1 + 0.3, z: (b.z0 + b.z1) / 2, vx: 0, vy: -14, vz: 18, grounded: false, rope: null, cling: null })
+    for (let i = 0; i < 4 && !g.p.grounded; i++) magma.dbg.step(1)
+    const f = magma.dbg.fx(); magma.dbg.pause(false); return { grounded: g.p.grounded, hitStop: +f.hitStop.toFixed(2), kick: +f.kick.toFixed(2) }
+  })
+  expect(r.grounded && r.hitStop > 0.04 && r.kick > 0.1, JSON.stringify(r)); return r
+})
+await t('スイングは少しだけ速い（ワイヤー中だけ重力1.07倍・空気抵抗0.0035）', async () => {
+  const r = await p.evaluate(() => ({ g: magma.sim.K.ROPEG, d: magma.sim.K.DRAG }))
+  expect(r.g === 1.07 && r.d === 0.0035, JSON.stringify(r)); return r
+})
 await t('津波は130mより後ろに離れない（休み続けると追いつかれる）', async () => {
   await p.evaluate(() => magma.start(11))
   const r = await p.evaluate(() => { magma.dbg.pause(true); const g = magma.g; Object.assign(g.p, { z: 900, y: 30, vz: 0 }); g.waveZ = -45; magma.dbg.step(1); const gap = g.p.z - g.waveZ; magma.dbg.pause(false); return { gap: +gap.toFixed(1) } })

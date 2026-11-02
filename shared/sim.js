@@ -14,7 +14,8 @@ export const K = {
   PUMP: 3.2,        // 振り子をこぐ加速（スティック前）
   TUG: 9, REEL: 1.2, MINLEN: 7, SAFE: 4.5,
   LAVA: 0.25,
-  DRAG: 0.004,
+  DRAG: 0.0035,     // 0.004→0.0035（最高速が平均 40→42m/s。2026-11-03 スイングを少しだけ速く）
+  ROPEG: 1.07,      // ワイヤー中だけ重力を少し強く（振り子が速く回る。空中しっぽ取り v5 と同じ）
   WAVE0: 6, WAVEA: 0.09, WAVEMAX: 30,   // 後ろから来るマグマの津波（m/秒、毎秒これだけ速くなる、上限）
   WAVEGAP: 130,     // 津波はこれ以上は離れない（貯金で休み続けられないように。2026-11-02 本人「ゆっくり進んでたら当たってゲームオーバー」）
   WIRE0: 10, WIREMAX: 12, REFILL: 2, PICK: 6.5,   // ワイヤーの残り本数（掛けるたびに1減る）、補充のリールで増える数、拾える距離
@@ -187,7 +188,7 @@ export function step(g, inp = {}) {
     if (!on) p.grounded = false
   } else {
     // 空中
-    p.vy -= K.G * dt
+    p.vy -= K.G * (p.rope ? K.ROPEG : 1) * dt
     p.vx += ax * K.AIR * dt; p.vz += az * K.AIR * dt * (p.rope ? 0 : 1)
     // 空気の抵抗（速さの2乗）。気持ちいい速さは残しつつ、際限なく速くならない
     const sp = Math.hypot(p.vx, p.vy, p.vz), dk = Math.max(0, 1 - K.DRAG * sp * dt)

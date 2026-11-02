@@ -1,6 +1,8 @@
 // bot で遊び方ごとの距離の分布を見る。node sim.mjs
 import { K, makeGame, step, botInput, botEasy, makeBot } from './shared/sim.js'
 if (process.env.GAP) K.WAVEGAP = Number(process.env.GAP)
+if (process.env.ROPEG) K.ROPEG = Number(process.env.ROPEG)
+if (process.env.DRAG) K.DRAG = Number(process.env.DRAG)
 const run = (kind, seed) => {
   const g = makeGame(seed, { easy: kind.startsWith('easy') })
   const B = makeBot(kind.endsWith('good') || kind === 'good' || kind === 'dawdle' ? 1 : 0, seed)

@@ -12,6 +12,9 @@ a{color:inherit}
 #view canvas{display:block;width:100%;height:100%}
 #heat{position:fixed;inset:0;pointer-events:none;z-index:2;opacity:0;will-change:opacity;background:linear-gradient(180deg,rgba(255,110,20,.7),rgba(255,70,10,.25) 22%,transparent 42%),radial-gradient(120% 100% at 50% 50%,transparent 50%,rgba(210,35,0,.7) 100%)}
 #engulf{position:fixed;inset:0;pointer-events:none;z-index:3;opacity:0;will-change:opacity;background:radial-gradient(90% 80% at 50% 40%,#ffb43a,#e2400f 55%,#5a1206)}
+/* 速さの線と、山場の光（2026-11-03 空中しっぽ取り v5 から。津波の赤い縁と混ざらないよう白っぽい光） */
+#speedfx{position:fixed;inset:0;width:100%;height:100%;z-index:4;pointer-events:none}
+#hitflash{position:fixed;inset:0;z-index:4;pointer-events:none;background:radial-gradient(ellipse at center,rgba(255,255,255,0) 35%,rgba(255,248,226,.6) 100%);opacity:0}
 
 .screen{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:max(14px,env(safe-area-inset-top)) 16px max(14px,env(safe-area-inset-bottom))}
 .modal{justify-content:center;background:rgba(10,8,8,.55)}
@@ -129,3 +132,8 @@ body.easy .stick,body.easy .tb{display:none}
 #hud.intro .stick,#hud.intro .tb,#hud.intro .hud-r,#hud.intro .tsu,#hud.over .stick,#hud.over .tb,#hud.over .hud-r,#hud.over .tsu{opacity:0;pointer-events:none}
 #hud .stick,#hud .tb,#hud .hud-r,#hud .tsu{transition:opacity .3s}
 @media (max-height:480px){.warn{top:10%}.warn-dia{width:84px}}
+/* 縦画面は知らせ（振り切った・遠すぎる等）を左上の「津波まで」の標識の下へ。前は 13% で標識に重なっていた */
+@media (orientation:portrait){
+  .toast{top:calc(max(12px,env(safe-area-inset-top)) + clamp(46px,6.4vmin,62px) + clamp(44px,6vmin,56px) + 48px)}
+  .tip{top:calc(max(12px,env(safe-area-inset-top)) + clamp(46px,6.4vmin,62px) + clamp(44px,6vmin,56px) + 94px)}
+}

@@ -14,6 +14,7 @@ await p.goto(`http://localhost:${PORT}/`); await p.waitForFunction(() => window.
 await p.evaluate(() => magma.start(3)); await p.waitForTimeout(1500)
 // bot に遊ばせ続ける（振り子中の普通の場面を測る）
 await p.evaluate(async () => { const m = magma.sim; const B = m.makeBot(1, 3); window.__botOn = true; const loop = () => { const g = magma.g; if (window.__botOn && g && !g.over) { magma.S.mode = 'play'; } requestAnimationFrame(loop) }; window.__B = B; window.__sim = m })
+if (process.env.SPEED) await p.evaluate(v => { window.__speedForce = v }, Number(process.env.SPEED))
 const cases = process.argv[2] === 'quick' ? ['all'] : ['all', '-lavaShader', '-wave', '-pointLights', '-shadow', '-allLava', '-reels', '-city']
 const out = []
 for (const c of cases) {
@@ -42,7 +43,7 @@ for (const c of cases) {
     if (R.shadowMap.enabled !== save.sh) { R.shadowMap.enabled = save.sh; S.traverse(o => { if (o.material) o.material.needsUpdate = true }) }
     reels.forEach(o => o.visible = true); city.forEach(o => o.visible = true)
     const avg = d.reduce((a, b) => a + b, 0) / d.length
-    return { c, ms: +avg.toFixed(1), p90: +d[Math.floor(d.length * 0.9)].toFixed(1), fps: +(1000 / avg).toFixed(0), calls: Math.round(calls / n), tris: Math.round(tris / n), found: { lava: !!lava, wave: !!wave, pl: pls.length } }
+    return { c, ms: +avg.toFixed(1), p90: +d[Math.floor(d.length * 0.9)].toFixed(1), fps: +(1000 / avg).toFixed(0), calls: Math.round(calls / n), tris: Math.round(tris / n), found: { lava: !!lava, wave: !!wave, pl: pls.length }, speedK: +(window.__speedK || 0).toFixed(2) }
   }, c)
   // 毎回やり直し（死んでいたら）
   await p.evaluate(() => { if (magma.g.over) magma.start(3) })
