@@ -1,8 +1,8 @@
 // 地面はマグマ（MAGMA SWING）の描画と入力。中身の計算は shared/sim.js
 import * as THREE from 'three'
-import { T } from './data.js?v=7'
-import * as SIM from '../shared/sim.js?v=7'
-import { CharRunnerModel, loadCharAssets, charAssets } from './charmodel.js?v=7'
+import { T } from './data.js?v=8'
+import * as SIM from '../shared/sim.js?v=8'
+import { CharRunnerModel, loadCharAssets, charAssets } from './charmodel.js?v=8'
 const { K, makeGame, step, pickHook, botInput, makeBot } = SIM
 
 const $ = id => document.getElementById(id)
@@ -193,6 +193,9 @@ function clearCourse() {
 // ワイヤー
 const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 5).translate(0, 0.5, 0).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4, metalness: 0.5 }))
 rope.visible = false; scene.add(rope)
+// 地面ワイヤーの掛け点（屋上に打ち込んだ金具。光る輪）
+const gAnchor = new THREE.Mesh(new THREE.RingGeometry(0.35, 0.7, 20).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffc04a, transparent: true, opacity: 0.9, depthWrite: false }))
+gAnchor.visible = false; scene.add(gAnchor)
 
 // マグマの津波（後ろから来る）。2026-11-02 本人「後ろから迫ってくる設定に。マグマの津波にしよう」
 // 重くしない（v2 で「重たい」と言われた）: 断面を横に伸ばした帯1枚（頂点を毎フレーム少し揺らす）＋絵をずらす＋粒は Points 2つ＋足もとの照り返し1枚。点光源・シェーダは使わない
@@ -560,9 +563,9 @@ function bumpReel(up) { const el = $('reel'); if (!el) return; el.classList.remo
 function toast(s) { $('toast').textContent = s; $('toast').hidden = false; toastT = 1.1 }
 function handleEvents(g) {
   for (const e of g.events) {
-    if (e.t === 'wire') { Snd.play('shot', { vol: 0.7 }); setTimeout(() => Snd.play('hook', { vol: 0.6 }), 60); burst(e.x, e.y, e.z, 6, 4, 0xffd27a); if (tut.on && tut.stage === 0) { tut.stage = 1; tut.t = 0 } }
-    else if (e.t === 'release') { Snd.play('swish', { vol: Math.min(1, 0.4 + e.v / 30) }); if (e.v > 24) Snd.play('wind', { vol: 0.5 }); if (e.v > 16) fovKick = Math.min(6, (e.v - 16) * 0.3); if (tut.on && tut.stage === 1) { tut.stage = 2; tut.t = 0 } }
-    else if (e.t === 'miss') { if (e.empty) { Snd.play('empty', { vol: 0.6, jitter: 0 }); toast(TT().empty); bumpReel() } else { Snd.play('miss', { vol: 0.5, jitter: 0 }); showMiss(e.far) } }
+    if (e.t === 'wire') { Snd.play('shot', { vol: 0.7 }); setTimeout(() => Snd.play('hook', { vol: 0.6 }), 60); burst(e.x, e.y, e.z, 6, 4, 0xffd27a); if (!e.ground && tut.on && tut.stage === 0) { tut.stage = 1; tut.t = 0 } }
+    else if (e.t === 'release') { Snd.play('swish', { vol: Math.min(1, 0.4 + e.v / 30) }); if (e.v > 24) Snd.play('wind', { vol: 0.5 }); if (e.v > 16) fovKick = Math.min(6, (e.v - 16) * 0.3); if (e.ground) fovKick = Math.max(fovKick, 3); if (!e.ground && tut.on && tut.stage === 1) { tut.stage = 2; tut.t = 0 } }
+    else if (e.t === 'miss') { if (e.empty) { Snd.play('empty', { vol: 0.6, jitter: 0 }); toast(TT().empty); bumpReel() } else { Snd.play('miss', { vol: 0.5, jitter: 0 }); showMiss(e.far, e.lava) } }
     else if (e.t === 'pick') { Snd.play('reel', { vol: 0.8 }); burst(e.x, e.y, e.z, 14, 7, 0xffd27a); bumpReel(true); if (g === G) punch(0.04, 0.35, 0.12, -3) }   // リールを拾った: 一瞬止まって光る
     else if (e.t === 'land') { Snd.play('land', { vol: 0.7 }); if (g === G && S.mode === 'play') { const v = e.v || 0; punch(v > 12 ? 0.08 : 0.05, v > 12 ? 0.6 : 0.3, Math.min(0.5, 0.15 + v / 50)); burst(G.p.x, G.p.y + 0.2, G.p.z, 12 + Math.min(14, v | 0), 5, 0xd8c8b0) } }   // 屋上に着いた
     else if (e.t === 'cling') { Snd.play('thud', { vol: 0.6 }); Snd.play('cloth', { vol: 0.4 }) }
@@ -577,13 +580,13 @@ function handleEvents(g) {
   }
   g.events.length = 0
 }
-function showMiss(far) {
+function showMiss(far, lava) {
   const el = $('miss')
   let x = innerWidth / 2, y = innerHeight * 0.35
   if (lastTap) { x = lastTap.x; y = lastTap.y; lastTap = null }
   el.style.left = x + 'px'; el.style.top = y + 'px'; el.hidden = false
   el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''
-  toast(far ? TT().far : TT().miss)
+  toast(lava ? TT().lavaNo : far ? TT().far : TT().miss)
 }
 
 // ---------- 昼から夕方から夜（進んだ距離で）
@@ -648,7 +651,8 @@ function draw(dt) {
     const hw = model.handWorld && model.handWorld.lengthSq() > 0 ? model.handWorld : _w.set(p.x, p.y + 1.6, p.z)
     _v.set(p.rope.x, p.rope.y, p.rope.z)
     rope.position.copy(hw); rope.lookAt(_v); rope.scale.set(1, 1, hw.distanceTo(_v)); rope.visible = true
-  } else rope.visible = false
+    gAnchor.visible = !!p.rope.ground; if (p.rope.ground) { gAnchor.position.set(p.rope.x, p.rope.y + 0.03, p.rope.z); gAnchor.scale.setScalar(1 + Math.sin(performance.now() / 90) * 0.15) }
+  } else { rope.visible = false; gAnchor.visible = false }
   // 狙えるフックを光らせる
   const pk = (S.mode === 'play' || demo) && !p.rope ? pickHook(G) : null
   const t = performance.now() / 1000

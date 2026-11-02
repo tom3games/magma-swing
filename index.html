@@ -56,13 +56,13 @@ button,canvas{touch-action:manipulation}
 @media (orientation:landscape) and (max-height:500px){#boot .pool{height:20vh}#boot .crest{bottom:calc(20vh - 13px)}#boot .bub{bottom:calc(20vh - 10px)}#boot .card{bottom:calc(20vh + 26px)}#boot .city{bottom:calc(20vh - 4px);width:min(460px,60vw)}}
 @media (prefers-reduced-motion:reduce){#boot .crest,#boot .glow,#boot .hk,#boot .bub,#boot .bub::after{animation:none}}
 </style>
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
 <!-- 読み込みの鎖（game.js → 中の import → three）を待たずに並べて取る -->
-<link rel="modulepreload" href="js/game.js?v=7">
+<link rel="modulepreload" href="js/game.js?v=8">
 <link rel="modulepreload" href="vendor/three.module.min.js">
 <link rel="modulepreload" href="vendor/three.core.min.js">
-<link rel="modulepreload" href="js/charmodel.js?v=7">
+<link rel="modulepreload" href="js/charmodel.js?v=8">
 <link rel="modulepreload" href="vendor/jsm/loaders/GLTFLoader.js">
 </head>
 <body>
@@ -246,7 +246,7 @@ button,canvas{touch-action:manipulation}
   };
 })();
 </script>
-<script src="sfx.js?v=7"></script>
-<script type="module" src="js/game.js?v=7"></script>
+<script src="sfx.js?v=8"></script>
+<script type="module" src="js/game.js?v=8"></script>
 </body>
 </html>

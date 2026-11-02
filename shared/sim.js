@@ -19,6 +19,10 @@ export const K = {
   WAVE0: 6, WAVEA: 0.09, WAVEMAX: 30,   // 後ろから来るマグマの津波（m/秒、毎秒これだけ速くなる、上限）
   WAVEGAP: 130,     // 津波はこれ以上は離れない（貯金で休み続けられないように。2026-11-02 本人「ゆっくり進んでたら当たってゲームオーバー」）
   WIRE0: 10, WIREMAX: 12, REFILL: 2, PICK: 6.5,   // ワイヤーの残り本数（掛けるたびに1減る）、補充のリールで増える数、拾える距離
+  // 地面ワイヤー（2026-11-03 本人「空中に浮いてる間は地面にもワイヤーつけて加速できるように」「地面をちゃんとタップしなあかん感じに」。ワイヤー系共通）
+  // 空中で屋上（マグマでない地面）をタップした時だけ掛かる。点へ加速し、近くか通り過ぎたら外れて前と上へ跳ねる
+  groundWireAcc: 30, groundWireRelease: 4, groundWireKick: 4, groundWireHop: 7, groundWireMaxT: 3,
+  VMAX: 44,         // 地面ワイヤーで足せる速さの上限（今の上手い bot の最高速 40 回の最大 44m/秒。これ以上は速くしない）
   DT: 1 / 60,
 }
 
@@ -108,10 +112,45 @@ export function pickHook(g, aim) {
   return best
 }
 
+// タップの光線が最初に当たる面: 屋上の上面（ground）・ビルの横の面（wall）・マグマ（lava）
+export function groundHit(g, aim) {
+  let best = null
+  for (const b of g.C.boxes) {
+    let t0 = -1e9, t1 = 1e9, ax = null
+    for (const [o, d, lo, hi, a] of [[aim.ox, aim.dx, b.x0, b.x1, 'x'], [aim.oy, aim.dy, 0, b.y1, 'y'], [aim.oz, aim.dz, b.z0, b.z1, 'z']]) {
+      if (Math.abs(d) < 1e-9) { if (o < lo || o > hi) { t0 = 1e9; break } continue }
+      let ta = (lo - o) / d, tb = (hi - o) / d; if (ta > tb) [ta, tb] = [tb, ta]
+      if (ta > t0) { t0 = ta; ax = a } if (tb < t1) t1 = tb
+    }
+    if (t0 > t1 || t0 < 0 || (best && t0 >= best.t)) continue
+    best = { t: t0, kind: ax === 'y' && aim.dy < 0 ? 'ground' : 'wall', x: aim.ox + aim.dx * t0, y: aim.oy + aim.dy * t0, z: aim.oz + aim.dz * t0 }
+  }
+  if (aim.dy < 0) { const t = (K.LAVA - aim.oy) / aim.dy; if (t > 0 && (!best || t < best.t)) best = { t, kind: 'lava', x: aim.ox + aim.dx * t, y: K.LAVA, z: aim.oz + aim.dz * t } }
+  return best
+}
+// 光線の上でフックがどこにあるか（groundHit の t と比べる）
+const rayT = (aim, h) => (h.x - aim.ox) * aim.dx + (h.y - aim.oy) * aim.dy + (h.z - aim.oz) * aim.dz
+// フックの近くをちゃんとタップしたか（フックを選ぶ時の許し 4m+12% より狭い。地面を狙ったタップをフックに取られないように）
+const onHook = (aim, h) => { const t = rayT(aim, h); if (t < 0) return false; const px = h.x - aim.ox - aim.dx * t, py = h.y - aim.oy - aim.dy * t, pz = h.z - aim.oz - aim.dz * t; return len3(px, py, pz) <= 2 + t * 0.05 }
+
 function attach(g, aim) {
   const p = g.p
   if (p.left <= 0) { g.events.push({ t: 'miss', empty: true }); return false }
-  const pk = pickHook(g, aim)
+  let pk = pickHook(g, aim)
+  // 地面ワイヤー: 空中で、タップが屋上かマグマに当たった時。フックが地面の当たりより 6m 以内（手前も）ならフックを優先
+  if (aim && !p.grounded && !p.cling) {
+    const gh = groundHit(g, aim)
+    const hookFirst = pk && !pk.miss && (!gh || gh.kind !== 'ground' || (onHook(aim, pk.h) && rayT(aim, pk.h) <= gh.t + 6))
+    if (gh && gh.kind === 'lava' && !(pk && !pk.miss)) { g.events.push({ t: 'miss', ground: true, lava: true }); return false }
+    if (gh && gh.kind === 'ground' && !hookFirst) {
+      const cy = p.y + 1.2, d = len3(gh.x - p.x, gh.y - cy, gh.z - p.z)
+      if (d > K.RANGE || gh.y > p.y - 1) { g.events.push({ t: 'miss', ground: true, far: d > K.RANGE }); return false }
+      p.rope = { x: gh.x, y: gh.y, z: gh.z, len: d, h: -1, t: 0, ground: true }
+      p.wires++; p.left--
+      g.events.push({ t: 'wire', x: gh.x, y: gh.y, z: gh.z, d, ground: true })
+      return true
+    }
+  }
   if (!pk || pk.miss) { g.events.push({ t: 'miss', far: !!(pk && pk.miss), h: pk && pk.h }); return false }
   if (p.grounded) { p.vy = K.JUMP * 0.8; p.grounded = false; p.y += 0.05 }
   p.cling = null
@@ -129,6 +168,16 @@ function release(g, byJump) {
   if (p.vy > -3) p.vy += byJump ? 4 : 2.5
   if (p.vz > 2) p.vz += 1.2
   g.events.push({ t: 'release', v: Math.hypot(p.vx, p.vy, p.vz) })
+}
+
+// 地面ワイヤーが外れる: 進む向きに少し足して上へ跳ねる（スリングショット）
+function groundRelease(g) {
+  const p = g.p, hv = Math.hypot(p.vx, p.vz)
+  if (hv > 0.1) { p.vx += p.vx / hv * K.groundWireKick; p.vz += p.vz / hv * K.groundWireKick }
+  p.vy = Math.max(p.vy, K.groundWireHop)
+  const sp = Math.hypot(p.vx, p.vy, p.vz); if (sp > K.VMAX) { const k = K.VMAX / sp; p.vx *= k; p.vy *= k; p.vz *= k }
+  p.rope = null
+  g.events.push({ t: 'release', v: sp, ground: true, auto: true })
 }
 
 function boxHit(b, p) { return p.x > b.x0 - 0.4 && p.x < b.x1 + 0.4 && p.z > b.z0 - 0.4 && p.z < b.z1 + 0.4 && p.y < b.y1 && p.y + 1.7 > 0 }
@@ -188,12 +237,26 @@ export function step(g, inp = {}) {
     if (!on) p.grounded = false
   } else {
     // 空中
-    p.vy -= K.G * (p.rope ? K.ROPEG : 1) * dt
+    const gw = p.rope && p.rope.ground
+    // 地面ワイヤー中は重力を消す（ロープに引かれている間に体が線より下へ垂れて、屋上の手前の壁にぶつかっていた）
+    if (!gw) p.vy -= K.G * (p.rope ? K.ROPEG : 1) * dt
     p.vx += ax * K.AIR * dt; p.vz += az * K.AIR * dt * (p.rope ? 0 : 1)
     // 空気の抵抗（速さの2乗）。気持ちいい速さは残しつつ、際限なく速くならない
     const sp = Math.hypot(p.vx, p.vy, p.vz), dk = Math.max(0, 1 - K.DRAG * sp * dt)
     p.vx *= dk; p.vy *= dk; p.vz *= dk
-    if (p.rope) {
+    if (gw) {
+      // 地面ワイヤー: 振り子にしない。胸から点の向きへ加速するだけ（瞬間移動にしない・VMAX を超えて速くしない）
+      const R = p.rope; R.t += dt
+      const dx = R.x - p.x, dy = R.y - (p.y + 1.2), dz = R.z - p.z, d = len3(dx, dy, dz)
+      const toward = d > 0.01 ? (p.vx * dx + p.vy * dy + p.vz * dz) / d : 0
+      if (d < K.groundWireRelease || (R.t > 0.25 && toward < 0) || R.t > K.groundWireMaxT) groundRelease(g)
+      else {
+        const s0 = Math.hypot(p.vx, p.vy, p.vz), a = K.groundWireAcc * dt / d
+        p.vx += dx * a; p.vy += dy * a; p.vz += dz * a
+        const s1 = Math.hypot(p.vx, p.vy, p.vz), cap = Math.max(s0, K.VMAX)
+        if (s1 > cap) { const k = cap / s1; p.vx *= k; p.vy *= k; p.vz *= k }
+      }
+    } else if (p.rope) {
       const R = p.rope
       R.t += dt
       // こぐ: スティック前で、振り子の進む向きに少し足す
@@ -213,7 +276,7 @@ export function step(g, inp = {}) {
       void d
     }
     p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt
-    if (p.rope) {
+    if (p.rope && !p.rope.ground) {
       const R = p.rope
       const dx = p.x - R.x, dy = p.y + 1.5 - R.y, dz = p.z - R.z, d = len3(dx, dy, dz)
       if (d > R.len) {

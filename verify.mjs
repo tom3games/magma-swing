@@ -201,6 +201,88 @@ await t('ワイヤーは一直線に引き寄せない（掛けた直後は重�
   // 落ちている（直線で上へ引かれていない）・縮む速さが一気でない
   expect(r.L0 > 30 && r.dropped > 1 && r.maxRate < 20, JSON.stringify(r)); return r
 })
+// ---------- 地面ワイヤー（2026-11-03 本人「空中に浮いてる間は地面にもワイヤーつけて加速できるように」「地面をちゃんとタップしなあかん感じに」）
+// 光線は人の少し後ろ上（カメラのあたり）から狙う点へ
+const GW = () => {
+  window.__gwAim = (p, x, y, z) => { const ox = p.x, oy = p.y + 4, oz = p.z - 6, dx = x - ox, dy = y - oy, dz = z - oz, l = Math.hypot(dx, dy, dz); return { ox, oy, oz, dx: dx / l, dy: dy / l, dz: dz / l } }
+  window.__gwSetup = () => {   // 次の屋上の手前の空中に置く
+    magma.dbg.pause(true); const g = magma.g, p = g.p, b = g.C.boxes.find(b => !b.start)
+    const cx = (b.x0 + b.x1) / 2
+    Object.assign(p, { x: cx, y: b.y1 + 12, z: b.z0 - 26, vx: 0, vy: 0, vz: 12, grounded: false, rope: null, cling: null }); g.waveZ = p.z - 100
+    return { g, p, b, cx }
+  }
+}
+await t('地面ワイヤー: 地面（屋上）に立っている時は、屋上をタップしても地面には掛からない', async () => {
+  await p.evaluate(() => magma.start(21)); await p.evaluate(GW)
+  const r = await p.evaluate(() => {
+    magma.dbg.pause(true); const g = magma.g, p = g.p
+    Object.assign(p, { x: 0, y: 10, z: 0, vx: 0, vy: 0, vz: 0, grounded: true, rope: null })
+    magma.input.aim = __gwAim(p, 2, 10, 6); magma.dbg.step(1)
+    const out = { grounded0: true, rope: p.rope ? (p.rope.ground ? 'ground' : 'hook') : null }; magma.dbg.pause(false); return out
+  })
+  expect(r.rope !== 'ground', JSON.stringify(r)); return r
+})
+await t('地面ワイヤー: 空中で屋上をタップすると掛かって加速し、近くで外れて上へ跳ねる（瞬間移動しない・最高速を超えない）', async () => {
+  await p.evaluate(() => magma.start(22)); await p.evaluate(GW)
+  const r = await p.evaluate(() => {
+    const { g, p, b, cx } = __gwSetup(), K = magma.sim.K
+    const tx = cx, ty = b.y1, tz = b.z0 + 3
+    const left0 = p.left
+    magma.input.aim = __gwAim(p, tx, ty, tz); magma.dbg.step(1)
+    const rope = p.rope && { ...p.rope }
+    let maxStep = 0, maxV = 0, ratio = 0, v0 = Math.hypot(p.vx, p.vy, p.vz), relD = null, relVy = null, frames = 0, stillRoped = 0
+    for (let i = 0; i < 200 && p.rope && p.rope.ground; i++) {
+      const x = p.x, y = p.y, z = p.z
+      magma.dbg.step(1); frames++
+      const st = Math.hypot(p.x - x, p.y - y, p.z - z), v = Math.hypot(p.vx, p.vy, p.vz)
+      maxStep = Math.max(maxStep, st); maxV = Math.max(maxV, v); ratio = Math.max(ratio, st / (Math.max(v, 0.01) * K.DT))
+      if (frames === 20) window.__gwShot = true
+      if (!p.rope) { relD = Math.hypot(tx - p.x, ty - (p.y + 1.2), tz - p.z); relVy = p.vy }
+    }
+    const out = { cling: !!p.cling, ground: !!(rope && rope.ground), used: left0 - p.left, frames, v0: +v0.toFixed(1), maxV: +maxV.toFixed(1), maxStep: +maxStep.toFixed(3), ratio: +ratio.toFixed(3), relD: relD && +relD.toFixed(1), relVy: relVy && +relVy.toFixed(1), landed: p.grounded }
+    magma.dbg.pause(false); return out
+  })
+  const K_VMAX = 44   // 今の上手い bot の最高速の最大（sim.js の K.VMAX）。重力の1ステップ分（0.34）は超えてよい
+  expect(r.ground && r.used === 1 && r.maxV > r.v0 + 5 && r.maxV <= K_VMAX + 0.34 && r.ratio < 1.05 && r.frames < 200 && r.relD != null && r.relD < 6 && r.relVy >= 7, JSON.stringify(r)); return r
+})
+await t('地面ワイヤー: 掛けている所の画面（縦）', async () => {
+  await p.evaluate(() => magma.start(22)); await p.evaluate(GW)
+  await p.evaluate(() => { const { p: pl, b, cx } = __gwSetup(); magma.input.aim = __gwAim(pl, cx, b.y1, (b.z0 + b.z1) / 2); magma.dbg.step(1); magma.dbg.step(14) })
+  const ok = await p.evaluate(() => !!(magma.g.p.rope && magma.g.p.rope.ground))
+  await p.screenshot({ path: `${ROOT}/shots/groundwire-phone.png` }); await p.evaluate(() => magma.dbg.pause(false))
+  expect(ok, 'not roped')
+})
+await t('地面ワイヤー: ワイヤーボタン（自動の狙い）では空中でも地面に掛からない', async () => {
+  await p.evaluate(() => magma.start(23)); await p.evaluate(GW)
+  const r = await p.evaluate(() => {
+    const { p } = __gwSetup(); let ground = false
+    for (let i = 0; i < 6; i++) { magma.input.wire = true; magma.dbg.step(1); if (p.rope && p.rope.ground) ground = true; if (p.rope) { magma.input.wire = true; magma.dbg.step(1) } }
+    magma.dbg.pause(false); return { ground }
+  })
+  expect(!r.ground, JSON.stringify(r)); return r
+})
+await t('地面ワイヤー: マグマの表面をタップしても掛からず、外れの表示が出る', async () => {
+  await p.evaluate(() => magma.start(24)); await p.evaluate(GW)
+  const r = await p.evaluate(() => {
+    const { g, p, b } = __gwSetup()
+    const z = b.z0 - 12, hit = magma.sim.groundHit(g, __gwAim(p, p.x, 0.25, z))
+    magma.input.aim = __gwAim(p, p.x, 0.25, z); magma.dbg.step(1)
+    const out = { kind: hit && hit.kind, rope: !!p.rope, miss: !document.getElementById('miss').hidden, toast: document.getElementById('toast').textContent }
+    magma.dbg.pause(false); return out
+  })
+  expect(r.kind === 'lava' && !r.rope && r.miss && r.toast === 'マグマには掛からない', JSON.stringify(r)); return r
+})
+await t('地面ワイヤー: 屋上のそばのフックを狙ったタップはフックを優先（地面の当たりより 6m 以内）', async () => {
+  await p.evaluate(() => magma.start(25)); await p.evaluate(GW)
+  const r = await p.evaluate(() => {
+    const { g, p } = __gwSetup()
+    const h = g.C.hooks.find(h => h.z > p.z + 10 && h.z < p.z + 40) || g.C.hooks.find(h => h.z > p.z + 5)
+    p.y = h.y - 5
+    magma.input.aim = __gwAim(p, h.x, h.y, h.z); magma.dbg.step(1)
+    const out = { rope: p.rope ? (p.rope.ground ? 'ground' : 'hook') : null }; magma.dbg.pause(false); return out
+  })
+  expect(r.rope === 'hook', JSON.stringify(r)); return r
+})
 await t('届かない所は × が出る', async () => {
   await p.evaluate(() => magma.start(11))
   const r = await p.evaluate(() => {
