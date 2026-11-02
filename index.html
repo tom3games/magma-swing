@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>地面はマグマ | ワイヤーで逃げる3Dバカゲー</title>
+<meta name="description" content="地面に着いたら終わり。光るフックにワイヤーを掛けて、後ろから来る溶岩より先へ振り子で飛ぶエンドレス。スマホのブラウザで遊べる。">
+<meta property="og:type" content="website">
+<meta property="og:title" content="地面はマグマ | ワイヤーで逃げる3Dバカゲー">
+<meta property="og:description" content="地面に着いたら終わり。ワイヤーで振り子して、溶岩の波より先へ。スマホのブラウザで遊べる。">
+<meta property="og:image" content="https://tom3games.github.io/magma-swing/og.png?v=1">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="https://tom3games.github.io/magma-swing/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#174a8c">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+[hidden]{display:none!important}
+html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+button,canvas{touch-action:manipulation}
+#boot-err{position:fixed;inset:auto 8px 8px 8px;z-index:99;background:#fff;color:#b00;font:12px/1.4 monospace;white-space:pre-wrap;padding:10px;border-radius:8px}
+</style>
+<link rel="stylesheet" href="style.css?v=1">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+</head>
+<body>
+<div id="view"></div>
+<div id="heat" aria-hidden="true"></div>
+
+<!-- タイトル: 道路の案内標識 -->
+<main id="title" class="screen">
+  <div class="guide">
+    <div class="guide-in">
+      <p class="g-sub"><span class="arrow" aria-hidden="true"></span><span data-t="sub"></span></p>
+      <h1 class="g-logo" data-t="logo"></h1>
+      <p class="g-en" data-t="en"></p>
+    </div>
+    <div class="guide-pole" aria-hidden="true"></div>
+  </div>
+  <p class="lead" data-t="lead"></p>
+  <div class="title-actions">
+    <p class="best-line"><span data-t="best"></span> <b id="bestM">0</b> m</p>
+    <button id="btnStart" class="go" data-t="start"></button>
+    <div class="row">
+      <button id="btnMode" class="plate"></button>
+      <button id="btnHow" class="plate" data-t="how"></button>
+    </div>
+    <div class="row small">
+      <button id="btnLang" class="mini" data-t="lang"></button>
+      <button id="btnMute" class="mini"></button>
+      <a class="mini" href="https://tom3games.github.io/" data-t="more"></a>
+    </div>
+  </div>
+  <p id="loading" class="loading" data-t="loading"></p>
+</main>
+
+<!-- 遊び方: 白い補助標識 -->
+<main id="how" class="screen modal" hidden>
+  <div class="aux">
+    <h2 data-t="howTitle"></h2>
+    <ol id="howRules" class="rules"></ol>
+    <ul id="howCtrl" class="ctrl"></ul>
+    <p class="credits" data-t="credits"></p>
+    <button id="btnHowClose" class="go small" data-t="close"></button>
+  </div>
+</main>
+
+<!-- 遊んでいる間 -->
+<main id="hud" hidden>
+  <div class="post" aria-live="off"><b id="dist">0</b><span>m</span></div>
+  <div class="hud-r">
+    <button id="btnPause" class="mini dark" aria-label="pause">II</button>
+  </div>
+  <p id="tip" class="tip" hidden></p>
+  <p id="toast" class="toast" hidden></p>
+  <div id="miss" class="miss" hidden>×</div>
+  <div id="stick" class="stick"><div class="knob"></div></div>
+  <button id="btnWire" class="tb wire" data-t="btnWire"></button>
+  <button id="btnJump" class="tb jump" data-t="btnJump"></button>
+  <p id="holdHint" class="hold-hint" data-t="hold" hidden></p>
+</main>
+
+<main id="pauseM" class="screen modal" hidden>
+  <div class="aux">
+    <h2 data-t="pause"></h2>
+    <button id="btnResume" class="go small" data-t="resume"></button>
+    <button id="btnQuit" class="plate" data-t="toTitle"></button>
+  </div>
+</main>
+
+<!-- 結果: 案内標識の記録 -->
+<main id="result" class="screen" hidden>
+  <div class="guide res">
+    <div class="guide-in">
+      <p class="g-sub" id="resWhy"></p>
+      <p class="g-dist"><span data-t="resTitle"></span><b id="resM">0</b><i>m</i></p>
+      <p class="g-line" id="resLine"></p>
+      <p class="g-stats" id="resStats"></p>
+      <p class="g-best" id="resBest"></p>
+    </div>
+  </div>
+  <div class="title-actions">
+    <button id="btnAgain" class="go" data-t="again"></button>
+    <div class="row">
+      <button id="btnTitle" class="plate" data-t="title"></button>
+      <button id="btnSave" class="plate" data-t="save"></button>
+      <button id="btnPost" class="plate" data-t="post"></button>
+    </div>
+  </div>
+</main>
+
+<script>
+(function(){
+  var opt={passive:false};
+  ['gesturestart','gesturechange','gestureend'].forEach(function(n){document.addEventListener(n,function(e){e.preventDefault()},opt)});
+  document.addEventListener('touchmove',function(e){if(e.touches&&e.touches.length>1)e.preventDefault()},opt);
+  var last=0;document.addEventListener('touchend',function(e){var n=Date.now();if(n-last<300&&!(e.target.closest&&e.target.closest('button,a')))e.preventDefault();last=n},opt);
+  document.addEventListener('dblclick',function(e){e.preventDefault()},opt);
+  window.addEventListener('wheel',function(e){if(e.ctrlKey)e.preventDefault()},opt);
+  window.addEventListener('keydown',function(e){if((e.ctrlKey||e.metaKey)&&['+','-','=','0',';'].indexOf(e.key)>=0)e.preventDefault()});
+})();
+(function(){
+  var errs=[];
+  window.addEventListener('error',function(e){errs.push((e.message||'error')+' @'+(e.filename||'')+':'+(e.lineno||''))});
+  window.addEventListener('unhandledrejection',function(e){errs.push('reject: '+(e.reason&&e.reason.message||e.reason))});
+  setTimeout(function(){
+    if(window.__magmaReady) return;
+    var d=document.createElement('div');d.id='boot-err';
+    d.textContent='起動できませんでした / failed to start\n'+(errs.join('\n')||'(no error captured)')+'\n'+navigator.userAgent;
+    document.body.appendChild(d);
+  },8000);
+})();
+</script>
+<script src="sfx.js?v=1"></script>
+<script type="module" src="js/game.js?v=1"></script>
+</body>
+</html>

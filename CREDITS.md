@@ -1,0 +1,27 @@
+- snd/lava_loop.mp3: 100 CC0 SFX #2 / rubberduck / CC0
+- snd/fire_wave.mp3: File:WWS Fireoftheforge.ogg / Work With Sounds / La Fonderie / CC BY 4.0
+- snd/shot.mp3: 50 RPG sound effects / Kenney / CC0
+- snd/hook1.mp3: 100 CC0 SFX #2 / rubberduck / CC0
+- snd/hook2.mp3: 100 CC0 SFX / rubberduck / CC0
+- snd/swish1.mp3: Swishes Sound Pack / artisticdude / CC0
+- snd/swish2.mp3: Swishes Sound Pack / artisticdude / CC0
+- snd/swish3.mp3: Swishes Sound Pack / artisticdude / CC0
+- snd/swish5.mp3: Swishes Sound Pack / artisticdude / CC0
+- snd/wind.mp3: Air whoosh / pyranostudios / CC0
+- snd/land1.mp3: 100 CC0 SFX #2 / rubberduck / CC0
+- snd/land2.mp3: 100 CC0 SFX #2 / rubberduck / CC0
+- snd/thud1.mp3: 75 CC0 breaking / falling / hit sfx / rubberduck / CC0
+- snd/thud2.mp3: 75 CC0 breaking / falling / hit sfx / rubberduck / CC0
+- snd/cloth.mp3: 50 RPG sound effects / Kenney / CC0
+- snd/splash1.mp3: 100 CC0 SFX / rubberduck / CC0
+- snd/splash2.mp3: 100 CC0 SFX / rubberduck / CC0
+- snd/boom.mp3: 100 CC0 SFX / rubberduck / CC0
+- snd/miss.mp3: Interface Sounds / Kenney / CC0
+- snd/click.mp3: Interface Sounds / Kenney / CC0
+- snd/ok.mp3: Interface Sounds / Kenney / CC0
+- snd/j_over.mp3: 85 Short music jingles / Kenney / CC0
+- snd/j_best.mp3: 85 Short music jingles / Kenney / CC0
+- snd/bgm_play.mp3: Catch me if you can! / poinl / CC0
+- snd/bgm_title.mp3: Comedy Funny Background Song / Almitory / 複数ライセンスのうち CC0 を選択
+- assets/chars: KayKit Adventurers 2.0 (Kay Lousberg, CC0)
+- three.js (MIT)

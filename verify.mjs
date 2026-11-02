@@ -1,0 +1,267 @@
+import { MUTE_LAUNCH, muteContext } from './mute.mjs'
+// 地面はマグマ の検証。node verify.mjs
+import { chromium, webkit } from 'playwright'
+import { spawn } from 'node:child_process'
+import { mkdirSync, readdirSync } from 'node:fs'
+const ROOT = import.meta.dirname
+mkdirSync(ROOT + '/shots', { recursive: true })
+const PORT = 5397
+const server = spawn(process.execPath, ['server.mjs'], { cwd: ROOT, env: { ...process.env, PORT: String(PORT) } })
+await new Promise(r => setTimeout(r, 400))
+const URL0 = `http://localhost:${PORT}/`
+let pass = 0, fail = 0
+const results = []
+async function t(name, fn) {
+  try { const r = await fn(); if (r === false) throw new Error('false'); pass++; results.push(`ok   ${name}${r && r !== true ? '  ' + JSON.stringify(r) : ''}`) }
+  catch (e) { fail++; results.push(`FAIL ${name}  ${e.message.split('\n')[0]}`) }
+  console.log(results[results.length - 1])
+}
+const expect = (c, msg) => { if (!c) throw new Error(msg) }
+const GL = ['--use-angle=metal', '--enable-unsafe-swiftshader']
+async function open(browser, opts = {}) {
+  const ctx = await browser.newContext({ locale: 'ja-JP', viewport: { width: 390, height: 844 }, acceptDownloads: true, ...opts })
+  await muteContext(ctx)
+  await ctx.addInitScript(() => {
+    try { localStorage.clear() } catch (e) {}
+    window.__osc = 0
+    const A = window.AudioContext || window.webkitAudioContext
+    if (A) { const o = A.prototype.createOscillator; A.prototype.createOscillator = function () { window.__osc++; return o.call(this) } }
+  })
+  const p = await ctx.newPage(); p.errs = []
+  p.on('pageerror', e => p.errs.push('pageerror ' + e.message))
+  p.on('console', m => { if (m.type() === 'error') p.errs.push('console ' + m.text()) })
+  p.on('requestfailed', r => { if (!/fonts\.(googleapis|gstatic)/.test(r.url())) p.errs.push('reqfail ' + r.url() + ' ' + (r.failure() && r.failure().errorText)) })
+  await p.goto(URL0); await p.waitForFunction(() => window.__magmaReady, null, { timeout: 15000 })
+  await p.waitForFunction(() => document.getElementById('loading').hidden, null, { timeout: 15000 })
+  return p
+}
+const fit = q => q.evaluate(() => {
+  const H = innerHeight, W = document.documentElement.clientWidth, de = document.documentElement, over = []
+  if (de.scrollHeight > H + 1) over.push('page:' + de.scrollHeight)
+  for (const el of document.querySelectorAll('main:not([hidden]) button, main:not([hidden]) .guide-in, main:not([hidden]) .aux, main:not([hidden]) .post, main:not([hidden]) .stick, main:not([hidden]) a')) {
+    if (el.closest('[hidden]') || !el.getClientRects().length) continue
+    const st = getComputedStyle(el); if (st.display === 'none' || st.visibility === 'hidden') continue
+    const r = el.getBoundingClientRect(); if (r.bottom > H + 1 || r.top < -1 || r.right > W + 1 || r.left < -1) over.push((el.id || el.className) + ':' + Math.round(r.left) + ',' + Math.round(r.top) + '-' + Math.round(r.right) + ',' + Math.round(r.bottom))
+  }
+  // ボタン同士の重なり
+  const bs = [...document.querySelectorAll('main:not([hidden]) button')].filter(b => b.getClientRects().length && getComputedStyle(b).display !== 'none').map(b => [b.id || b.className, b.getBoundingClientRect(), b.closest('main')])
+  for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) { if (bs[i][2] !== bs[j][2]) continue; const a = bs[i][1], b = bs[j][1]; if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) over.push('overlap ' + bs[i][0] + '/' + bs[j][0]) }
+  return { H, over: over.slice(0, 6) }
+})
+const SIZES = [[360, 640, 'small'], [390, 844, 'phone'], [844, 390, 'land'], [667, 375, 'land-se'], [768, 1024, 'tab'], [1440, 900, 'pc']]
+
+const browser = await chromium.launch({ ...MUTE_LAUNCH, args: [...MUTE_LAUNCH.args, ...GL] })
+const p = await open(browser)
+await t('起動時にエラーが出ない', async () => { expect(p.errs.length === 0, p.errs.join('|')) })
+await t('ブラウザの拡大が起きない', async () => {
+  const r = await p.evaluate(() => {
+    const vp = document.querySelector('meta[name=viewport]').content
+    const g = new Event('gesturestart', { cancelable: true }); document.dispatchEvent(g)
+    const w = new WheelEvent('wheel', { ctrlKey: true, deltaY: -10, bubbles: true, cancelable: true }); window.dispatchEvent(w)
+    const k = new KeyboardEvent('keydown', { key: '+', ctrlKey: true, bubbles: true, cancelable: true }); window.dispatchEvent(k)
+    return { vp, gesture: g.defaultPrevented, wheel: w.defaultPrevented, key: k.defaultPrevented, ta: getComputedStyle(document.documentElement).touchAction, us: getComputedStyle(document.body).userSelect }
+  })
+  expect(/user-scalable=no/.test(r.vp) && r.gesture && r.wheel && r.key && r.ta === 'manipulation' && r.us === 'none', JSON.stringify(r))
+})
+await t('OGP 一式がある', async () => {
+  const r = await p.evaluate(() => ['og:title', 'og:description', 'og:image', 'og:url', 'og:type'].map(k => !!document.querySelector(`meta[property="${k}"]`)).concat(!!document.querySelector('meta[name="twitter:card"]')))
+  expect(r.every(Boolean), JSON.stringify(r))
+})
+await t('巻取ボタンが無い（本人 2026-11-02「巻き取りって言うボタンいらん」）', async () => {
+  const r = await p.evaluate(() => ({ reel: !!document.querySelector('[data-k=boost],#btnReel'), text: /巻取|巻き取り/.test(document.body.innerText) }))
+  expect(!r.reel && !r.text, JSON.stringify(r))
+})
+await t('音の素材が全部読める・合成音を使っていない', async () => {
+  const files = readdirSync(ROOT + '/snd')
+  const r = await p.evaluate(async fs => { const bad = []; for (const f of fs) { const x = await fetch('snd/' + f); if (!x.ok) bad.push(f) } return bad }, files)
+  expect(r.length === 0, r.join(','))
+  await p.click('#btnStart'); await p.waitForTimeout(600)
+  await p.evaluate(() => { magma.input.wire = true }); await p.waitForTimeout(800)
+  const osc = await p.evaluate(() => window.__osc)
+  expect(osc === 0, 'createOscillator ' + osc)
+  return { files: files.length, osc }
+})
+await t('遊びの通し: 跳んでワイヤーを掛け、離して進む', async () => {
+  await p.evaluate(() => magma.start(11))
+  const r = await p.evaluate(() => {
+    magma.dbg.pause(true)
+    const g = magma.g
+    magma.setStick(0, 1); magma.dbg.step(50)
+    magma.input.jump = true; magma.dbg.step(12)
+    magma.input.wire = true; magma.dbg.step(1)
+    const roped = !!g.p.rope
+    magma.dbg.step(70)
+    const z1 = g.p.z
+    magma.input.wire = true; magma.dbg.step(1)
+    const released = !g.p.rope
+    magma.dbg.step(30)
+    magma.setStick(0, 0); magma.dbg.pause(false)
+    return { roped, released, z1: Math.round(z1), z2: Math.round(g.p.z), over: g.over }
+  })
+  expect(r.roped && r.released && r.z2 > 25, JSON.stringify(r)); return r
+})
+await t('ワイヤーは一直線に引き寄せない（掛けた直後は重力で落ちながら振れる）', async () => {
+  await p.evaluate(() => magma.start(11))
+  const r = await p.evaluate(() => {
+    magma.dbg.pause(true)
+    const g = magma.g, p = g.p
+    const h = g.C.hooks.find(h => h.z > 70 && !g.C.boxes.some(b => h.z - 33 > b.z0 - 3 && h.z - 33 < b.z1 + 3))
+    Object.assign(p, { x: h.x, y: h.y - 9, z: h.z - 33, vx: 0, vy: 0, vz: 0, grounded: false })
+    g.waveZ = p.z - 200
+    { const dx = h.x - p.x, dy = h.y - p.y - 1.5, dz = h.z - p.z, l = Math.hypot(dx, dy, dz); magma.input.aim = { ox: p.x, oy: p.y + 1.5, oz: p.z, dx: dx / l, dy: dy / l, dz: dz / l } }
+    magma.dbg.step(1)
+    const L0 = p.rope && p.rope.len, y0 = p.y
+    let minY = 1e9, maxRate = 0, prev = L0
+    for (let i = 0; i < 30; i++) { magma.dbg.step(1); minY = Math.min(minY, p.y); if (p.rope) { maxRate = Math.max(maxRate, (prev - p.rope.len) * 60); prev = p.rope.len } }
+    magma.dbg.pause(false)
+    return { L0: L0 && +L0.toFixed(1), dropped: +(y0 - minY).toFixed(2), maxRate: +maxRate.toFixed(1), d: Math.round(L0) }
+  })
+  // 落ちている（直線で上へ引かれていない）・縮む速さが一気でない
+  expect(r.L0 > 30 && r.dropped > 1 && r.maxRate < 20, JSON.stringify(r)); return r
+})
+await t('届かない所は × が出る', async () => {
+  await p.evaluate(() => magma.start(11))
+  const r = await p.evaluate(() => {
+    magma.dbg.pause(true)
+    const g = magma.g, p = g.p
+    Object.assign(p, { x: 0, y: 12, z: -60, vx: 0, vy: 0, vz: 0, grounded: false })
+    g.waveZ = -300
+    // 画面のまん中から前上へ向けた光線（遠いフックを狙う）
+    const far = g.C.hooks.find(h => h.z > 60)
+    const dx = far.x - p.x, dy = far.y - p.y, dz = far.z - p.z, l = Math.hypot(dx, dy, dz)
+    magma.input.aim = { ox: p.x, oy: p.y + 1.5, oz: p.z, dx: dx / l, dy: dy / l, dz: dz / l }
+    magma.dbg.step(1)
+    const roped = !!p.rope
+    magma.dbg.pause(false)
+    return { roped, dist: Math.round(l), miss: !document.getElementById('miss').hidden, toast: document.getElementById('toast').textContent }
+  })
+  expect(!r.roped && r.miss && r.dist > 50, JSON.stringify(r)); return r
+})
+await t('画面をタッチしたフックにワイヤーが掛かる', async () => {
+  await p.evaluate(() => magma.start(11))
+  await p.waitForTimeout(500)
+  const r = await p.evaluate(() => {
+    magma.dbg.pause(true)
+    const g = magma.g, h = g.C.hooks[0]
+    magma.dbg.step(1)
+    const v = new magma.camera.position.constructor(h.x, h.y, h.z).project(magma.camera)
+    const sx = (v.x + 1) / 2 * innerWidth, sy = (1 - v.y) / 2 * innerHeight
+    magma.aimAt(sx, sy); magma.dbg.step(1)
+    const ok = g.p.rope && g.p.rope.h === h.i
+    magma.dbg.pause(false)
+    return { ok: !!ok, sx: Math.round(sx), sy: Math.round(sy) }
+  })
+  expect(r.ok, JSON.stringify(r)); return r
+})
+await t('壁に張り付いて上下左右に這える', async () => {
+  await p.evaluate(() => magma.start(11))
+  const r = await p.evaluate(() => {
+    magma.dbg.pause(true)
+    const g = magma.g, p = g.p
+    const b = g.C.boxes.find(b => !b.start)
+    g.waveZ = b.z0 - 300
+    Object.assign(p, { x: (b.x0 + b.x1) / 2, y: b.y1 - 4, z: b.z0 - 1.2, vx: 0, vy: 0, vz: 8, grounded: false })
+    magma.dbg.step(8)
+    const cling = !!p.cling
+    const y0 = p.y; magma.setStick(0, 1); magma.dbg.step(30); const up = p.y - y0
+    const y1 = p.y; magma.setStick(0, -1); magma.dbg.step(30); const down = y1 - p.y
+    const x0 = p.x; magma.setStick(1, 0); magma.dbg.step(30); const right = p.x - x0
+    const x1 = p.x; magma.setStick(-1, 0); magma.dbg.step(30); const left = p.x - x1
+    magma.setStick(0, 1); magma.dbg.step(120); const topped = p.grounded
+    magma.setStick(0, 0); magma.dbg.pause(false)
+    return { cling, up: +up.toFixed(2), down: +down.toFixed(2), right: +right.toFixed(2), left: +left.toFixed(2), topped }
+  })
+  expect(r.cling && r.up > 1 && r.down > 1 && Math.abs(r.right) > 1 && Math.abs(r.left) > 1 && Math.sign(r.right) !== Math.sign(r.left) && r.topped, JSON.stringify(r)); return r
+})
+await t('マグマに落ちたら終わり、結果に距離と自己ベストが出る', async () => {
+  await p.evaluate(() => magma.start(11))
+  await p.evaluate(() => { const g = magma.g; Object.assign(g.p, { x: 0, y: 2, z: 120, vx: 0, vy: -3, vz: 0, grounded: false }); g.p.maxZ = 120; g.waveZ = -100 })
+  await p.waitForFunction(() => magma.mode === 'result', null, { timeout: 6000 })
+  const r = await p.evaluate(() => ({ why: document.getElementById('resWhy').textContent, m: document.getElementById('resM').textContent, best: localStorage.getItem('ms.best'), res: window.__lastResult }))
+  expect(r.why === 'マグマに着地' && r.m === '120' && r.best === '120', JSON.stringify(r)); return r
+})
+await t('何もしないと溶岩の波に飲まれて最低の結果', async () => {
+  await p.evaluate(() => { localStorage.setItem('ms.tut', '1'); magma.start(11) })
+  const r = await p.evaluate(() => { magma.dbg.pause(true); magma.dbg.step(60 * 40); magma.dbg.pause(false); return { over: magma.g.over, why: magma.g.p.dead, m: Math.round(magma.g.p.maxZ), t: Math.round(magma.g.t) } })
+  await p.waitForTimeout(1500)
+  expect(r.over && r.why === 'wave' && r.m < 5, JSON.stringify(r)); return r
+})
+await t('片手: 押している間つかみ、離すと放す', async () => {
+  await p.evaluate(() => magma.start(11, { easy: true }))
+  const r = await p.evaluate(() => {
+    magma.dbg.pause(true); const g = magma.g
+    magma.setHold(true); magma.dbg.step(20); const roped = !!g.p.rope
+    magma.dbg.step(40); magma.setHold(false); magma.dbg.step(1); const released = !g.p.rope
+    magma.dbg.pause(false)
+    return { roped, released, easy: g.easy, stickHidden: getComputedStyle(document.getElementById('stick')).display === 'none' }
+  })
+  await p.evaluate(() => magma.start(11, { easy: false }))
+  expect(r.roped && r.released && r.easy && r.stickHidden, JSON.stringify(r)); return r
+})
+await t('進むと昼から夜へ暗くなる', async () => {
+  await p.evaluate(() => magma.start(11))
+  const a = await p.evaluate(() => window.__night)
+  await p.evaluate(() => { magma.g.p.maxZ = 1700 }); await p.waitForTimeout(2500)
+  const b = await p.evaluate(() => window.__night)
+  expect(a < 0.1 && b > 0.85, JSON.stringify({ a, b })); return { start: +a.toFixed(2), late: +b.toFixed(2) }
+})
+await t('英語に切り替わる', async () => {
+  await p.evaluate(() => magma.showResult()); await p.waitForTimeout(1500)
+  await p.click('#btnTitle'); await p.waitForTimeout(300)
+  await p.click('#btnLang')
+  const r = await p.evaluate(() => ({ logo: document.querySelector('.g-logo').textContent, lang: document.documentElement.lang }))
+  await p.click('#btnLang')
+  expect(r.logo === 'MAGMA SWING' && r.lang === 'en', JSON.stringify(r))
+})
+await t('結果を画像で保存できる', async () => {
+  await p.evaluate(() => magma.start(11)); await p.evaluate(() => magma.showResult())
+  await p.waitForFunction(() => magma.mode === 'result')
+  const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 5000 }), p.click('#btnSave')])
+  return dl.suggestedFilename()
+})
+await t('テスト中は実際に無音', async () => { const r = await p.evaluate(() => window.__muteOk()); expect(r === true, String(r)) })
+await t('通しでエラーが出ていない', async () => { expect(p.errs.length === 0, p.errs.slice(0, 3).join('|')) })
+await p.close()
+
+// 6サイズ × 全画面
+for (const [w, h, name] of SIZES) {
+  const touch = w < 1000
+  const q = await open(browser, { viewport: { width: w, height: h }, hasTouch: touch, isMobile: touch })
+  const views = {}
+  await q.waitForTimeout(600)
+  views.title = await fit(q); await q.screenshot({ path: `${ROOT}/shots/fit-${name}-title.png` })
+  await q.click('#btnHow'); views.how = await fit(q); await q.screenshot({ path: `${ROOT}/shots/fit-${name}-how.png` }); await q.click('#btnHowClose')
+  await q.click('#btnStart'); await q.waitForTimeout(900); views.play = await fit(q); await q.screenshot({ path: `${ROOT}/shots/fit-${name}-play.png` })
+  await q.evaluate(() => magma.showResult()); await q.waitForFunction(() => magma.mode === 'result'); await q.waitForTimeout(300)
+  views.result = await fit(q); await q.screenshot({ path: `${ROOT}/shots/fit-${name}-result.png` })
+  await t(`一画面に収まり重ならない ${name} ${w}x${h}`, async () => {
+    const bad = Object.entries(views).filter(([, v]) => v.over.length).map(([k, v]) => k + ':' + v.over.join(','))
+    expect(bad.length === 0 && q.errs.length === 0, bad.join(' | ') + q.errs.join('|'))
+  })
+  await q.close()
+}
+await browser.close()
+
+// WebKit（iPhone の Safari 相当）
+const wk = await webkit.launch()
+const wp = await open(wk, { isMobile: true, hasTouch: true, deviceScaleFactor: 2 })
+await t('WebKit: タップで出発・ワイヤーボタン・スティック', async () => {
+  await wp.tap('#btnStart'); await wp.waitForTimeout(500)
+  const r0 = await wp.evaluate(() => magma.mode)
+  const box = await wp.locator('#stick').boundingBox()
+  await wp.evaluate(({ x, y }) => {
+    const el = document.getElementById('stick')
+    el.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 5, clientX: x, clientY: y, bubbles: true }))
+    el.dispatchEvent(new PointerEvent('pointermove', { pointerId: 5, clientX: x, clientY: y - 60, bubbles: true }))
+  }, { x: box.x + box.width / 2, y: box.y + box.height / 2 })
+  await wp.waitForTimeout(400)
+  const moved = await wp.evaluate(() => magma.g.p.z)
+  await wp.tap('#btnJump'); await wp.waitForTimeout(150); await wp.tap('#btnWire'); await wp.waitForTimeout(100)
+  const roped = await wp.evaluate(() => !!magma.g.p.rope)
+  expect(r0 === 'play' && moved > 0.5 && roped, JSON.stringify({ r0, moved, roped })); return { moved: +moved.toFixed(1), roped }
+})
+await t('WebKit: 無音・エラーなし', async () => { const m = await wp.evaluate(() => window.__muteOk()); expect(m === true && wp.errs.length === 0, m + ' ' + wp.errs.join('|')) })
+await wk.close()
+server.kill()
+console.log(`\n${pass} passed, ${fail} failed`)
+process.exit(fail ? 1 : 0)
