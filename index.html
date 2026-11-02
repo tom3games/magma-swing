@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>地面はマグマ | ワイヤーで逃げる3Dバカゲー</title>
-<meta name="description" content="地面に着いたら終わり。光るフックにワイヤーを掛けて、後ろから来る溶岩より先へ振り子で飛ぶエンドレス。スマホのブラウザで遊べる。">
+<meta name="description" content="地面に着いたら終わり。光るフックにワイヤーを掛けて、後ろから迫るマグマの津波より先へ振り子で飛ぶエンドレス。スマホのブラウザで遊べる。">
 <meta property="og:type" content="website">
 <meta property="og:title" content="地面はマグマ | ワイヤーで逃げる3Dバカゲー">
-<meta property="og:description" content="地面に着いたら終わり。ワイヤーで振り子して、溶岩の波より先へ。スマホのブラウザで遊べる。">
-<meta property="og:image" content="https://tom3games.github.io/magma-swing/og.png?v=1">
+<meta property="og:description" content="地面に着いたら終わり。ワイヤーで振り子して、マグマの津波から逃げ切れ。スマホのブラウザで遊べる。">
+<meta property="og:image" content="https://tom3games.github.io/magma-swing/og.png?v=2">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:url" content="https://tom3games.github.io/magma-swing/">
@@ -25,12 +25,13 @@ body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 button,canvas{touch-action:manipulation}
 #boot-err{position:fixed;inset:auto 8px 8px 8px;z-index:99;background:#fff;color:#b00;font:12px/1.4 monospace;white-space:pre-wrap;padding:10px;border-radius:8px}
 </style>
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 <script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
 </head>
 <body>
 <div id="view"></div>
 <div id="heat" aria-hidden="true"></div>
+<div id="engulf" aria-hidden="true"></div>
 
 <!-- タイトル: 道路の案内標識 -->
 <main id="title" class="screen">
@@ -74,6 +75,7 @@ button,canvas{touch-action:manipulation}
 <main id="hud" hidden>
   <div class="post" aria-live="off"><b id="dist">0</b><span>m</span></div>
   <div id="reel" class="reel" aria-label="wire"><svg viewBox="0 0 48 48" aria-hidden="true"><circle class="fl" cx="24" cy="24" r="23"/><circle class="wind" cx="24" cy="24" r="19"/><circle class="ln" cx="24" cy="24" r="13"/><circle class="hub" cx="24" cy="24" r="5"/><circle class="hole" cx="24" cy="24" r="2"/></svg><b>10</b><i data-t="reelUnit"></i></div>
+  <div id="tsu" class="tsu"><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="6" y="6" width="28" height="28" rx="3" transform="rotate(45 20 20)" class="dia"/><path class="wv" d="M9 26c3-1 4-3 6-7 2-5 7-7 11-5-3 0-5 2-5 5 0 2 2 3 4 2 1 2 0 4-2 5H9z"/></svg><span data-t="tsu"></span><b id="tsuM">0</b><i>m</i></div>
   <div class="hud-r">
     <button id="btnPause" class="mini dark" aria-label="pause">II</button>
   </div>
@@ -84,6 +86,11 @@ button,canvas{touch-action:manipulation}
   <button id="btnWire" class="tb wire" data-t="btnWire"></button>
   <button id="btnJump" class="tb jump" data-t="btnJump"></button>
   <p id="holdHint" class="hold-hint" data-t="hold" hidden></p>
+  <div id="warn" class="warn" hidden>
+    <svg class="warn-dia" viewBox="0 0 120 120" aria-hidden="true"><rect x="18" y="18" width="84" height="84" rx="8" transform="rotate(45 60 60)" fill="#f6c21c" stroke="#141414" stroke-width="5"/><rect x="25" y="25" width="70" height="70" rx="5" transform="rotate(45 60 60)" fill="none" stroke="#141414" stroke-width="2"/><path d="M30 76c8-2 12-8 16-17 5-12 17-17 28-12-8 1-12 6-11 13 1 5 6 7 11 5 2 6-1 11-7 13H30z" fill="#141414"/><path d="M28 82h64" stroke="#141414" stroke-width="4"/></svg>
+    <p id="warnText" class="warn-plate"></p>
+    <p id="warnSkip" class="warn-skip" data-t="warnSkip" hidden></p>
+  </div>
 </main>
 
 <main id="pauseM" class="screen modal" hidden>
@@ -137,7 +144,7 @@ button,canvas{touch-action:manipulation}
   },8000);
 })();
 </script>
-<script src="sfx.js?v=2"></script>
-<script type="module" src="js/game.js?v=2"></script>
+<script src="sfx.js?v=3"></script>
+<script type="module" src="js/game.js?v=3"></script>
 </body>
 </html>

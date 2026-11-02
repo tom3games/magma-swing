@@ -38,7 +38,7 @@ async function open(browser, opts = {}) {
 const fit = q => q.evaluate(() => {
   const H = innerHeight, W = document.documentElement.clientWidth, de = document.documentElement, over = []
   if (de.scrollHeight > H + 1) over.push('page:' + de.scrollHeight)
-  for (const el of document.querySelectorAll('main:not([hidden]) button, main:not([hidden]) .guide-in, main:not([hidden]) .aux, main:not([hidden]) .post, main:not([hidden]) .stick, main:not([hidden]) a')) {
+  for (const el of document.querySelectorAll('main:not([hidden]) button, main:not([hidden]) .guide-in, main:not([hidden]) .aux, main:not([hidden]) .post, main:not([hidden]) .stick, main:not([hidden]) a, main:not([hidden]) .warn:not([hidden]), main:not([hidden]) .tsu')) {
     if (el.closest('[hidden]') || !el.getClientRects().length) continue
     const st = getComputedStyle(el); if (st.display === 'none' || st.visibility === 'hidden') continue
     const r = el.getBoundingClientRect(); if (r.bottom > H + 1 || r.top < -1 || r.right > W + 1 || r.left < -1) over.push((el.id || el.className) + ':' + Math.round(r.left) + ',' + Math.round(r.top) + '-' + Math.round(r.right) + ',' + Math.round(r.bottom))
@@ -70,6 +70,46 @@ await t('OGP 一式がある', async () => {
 await t('巻取ボタンが無い（本人 2026-11-02「巻き取りって言うボタンいらん」）', async () => {
   const r = await p.evaluate(() => ({ reel: !!document.querySelector('[data-k=boost],#btnReel'), text: /巻取|巻き取り/.test(document.body.innerText) }))
   expect(!r.reel && !r.text, JSON.stringify(r))
+})
+await t('始まりの演出: 振り返って津波を見せる間は操作が効かず、津波も止まっている（初回は飛ばせない）', async () => {
+  await p.click('#btnStart')
+  const r = await p.evaluate(async () => {
+    const g = magma.g, z0 = g.p.z, w0 = g.waveZ, mode0 = magma.mode, long = magma.intro.long, D = magma.intro.D
+    const t0 = performance.now()
+    await new Promise(r => setTimeout(r, 300))
+    // 操作してみる（キー・ボタン・画面タップ・スティック）
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', bubbles: true }))
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', bubbles: true }))
+    document.getElementById('btnWire').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+    document.getElementById('btnJump').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 200, clientY: 300 }))
+    const skipped = magma.mode !== 'intro'
+    await new Promise(r => setTimeout(r, 900))
+    const mid = { mode: magma.mode, rope: !!g.p.rope, dz: +(g.p.z - z0).toFixed(3), dw: +(g.waveZ - w0).toFixed(3), t: g.t, warn: document.getElementById('warn').hidden ? '' : document.getElementById('warnText').textContent, ctrlOpacity: getComputedStyle(document.getElementById('btnWire')).opacity, camZ: +magma.camera.position.z.toFixed(1), front: +magma.front.toFixed(1) }
+    while (magma.mode === 'intro' && performance.now() - t0 < 6000) await new Promise(r => setTimeout(r, 50))
+    const dur = (performance.now() - t0) / 1000
+    for (let i = 0; i < 40; i++) await new Promise(r => requestAnimationFrame(r))
+    // 演出のあとは効く
+    magma.input.jump = true; await new Promise(r => setTimeout(r, 250)); magma.input.wire = true; await new Promise(r => setTimeout(r, 120))
+    return { mode0, long, D, skipped, mid, dur: +dur.toFixed(2), after: magma.mode, roped: !!g.p.rope, moved: g.t > 0.2 }
+  })
+  // 演出の間: 津波は人の後ろ（カメラは人より後ろ＝津波側を向いて前に出ている）
+  expect(r.mode0 === 'intro' && r.long && !r.skipped && r.mid.mode === 'intro' && !r.mid.rope && r.mid.dz === 0 && r.mid.dw === 0 && r.mid.t === 0 && r.mid.warn && r.mid.ctrlOpacity === '0' && r.mid.camZ > 3 && r.mid.front < -45, JSON.stringify(r))
+  expect(r.dur > 3 && r.dur < 4 && r.after === 'play' && r.roped && r.moved, JSON.stringify(r))
+  return { dur: r.dur, warn: r.mid.warn, front: r.mid.front, camZ: r.mid.camZ }
+})
+await t('2回目からは演出が短く、タップで飛ばせる', async () => {
+  await p.evaluate(() => magma.start(12, { intro: true }))
+  const r = await p.evaluate(async () => {
+    const long = magma.intro.long, D = magma.intro.D
+    await new Promise(r => setTimeout(r, 400))
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 200, clientY: 300 }))
+    const after = magma.mode
+    await new Promise(r => setTimeout(r, 200))
+    return { long, D, after, wire: magma.g.p.rope, skipShown: !document.getElementById('warnSkip').hidden }
+  })
+  await p.evaluate(() => magma.showResult()); await p.waitForFunction(() => magma.mode === 'result'); await p.click('#btnTitle')
+  expect(!r.long && r.D < 2 && r.after === 'play' && !r.wire, JSON.stringify(r)); return r
 })
 await t('音の素材が全部読める・合成音を使っていない', async () => {
   const files = readdirSync(ROOT + '/snd')
@@ -175,7 +215,7 @@ await t('壁に張り付いて上下左右に這える', async () => {
 })
 await t('掛けられるフックには必ず見える物がある（番号の重なりで見えないフックができていた・2026-11-02 本人「何もない所に掛かる」）', async () => {
   const r = await p.evaluate(async () => {
-    const m = await import('./shared/sim.js'); magma.start(5); const g = magma.g, B = m.makeBot(1, 5)
+    const m = magma.sim; magma.start(5); const g = magma.g, B = m.makeBot(1, 5)
     m.K.WIRE0 = 999; g.p.left = 999
     magma.dbg.pause(true); let bad = 0, checked = 0, ids = new Set(), dup = 0
     for (let i = 0; i < 60 * 70; i++) {
@@ -198,7 +238,7 @@ await t('掛けられるフックには必ず見える物がある（番号の�
 })
 await t('ワイヤーは有限: 掛けると1本減り、0本だと掛からない。リールを拾うと増える', async () => {
   const r = await p.evaluate(async () => {
-    const m = await import('./shared/sim.js'); magma.start(6); const g = magma.g; magma.dbg.pause(true)
+    const m = magma.sim; magma.start(6); const g = magma.g; magma.dbg.pause(true)
     const p0 = g.p.left
     g.p.grounded = false; g.p.y = 12; g.p.z = 20; g.p.x = g.C.hooks[1].x
     m.step(g, { wire: true }); const afterWire = g.p.left, roped = !!g.p.rope
@@ -213,9 +253,49 @@ await t('ワイヤーは有限: 掛けると1本減り、0本だと掛からな�
   })
   expect(r.p0 === 10 && r.afterWire === 9 && r.roped && r.emptyMiss && !r.ropedEmpty && r.afterPick === 2 && r.pickEv, JSON.stringify(r)); return r
 })
-await t('マグマと波は軽い作り（シェーダ・点光源を使わない）', async () => {
-  const r = await p.evaluate(() => { let sh = 0, pl = 0; magma.scene.traverse(o => { if (o.isPointLight) pl++; if (o.material && o.material.isShaderMaterial && o.geometry && o.geometry.parameters && (o.geometry.parameters.width === 700 || o.geometry.parameters.width === 160)) sh++ }); return { sh, pl } })
-  expect(r.sh === 0 && r.pl === 0, JSON.stringify(r)); return r
+await t('マグマと津波は軽い作り（シェーダ・点光源を使わない・津波の頂点は千未満）', async () => {
+  const r = await p.evaluate(() => {
+    let sh = 0, pl = 0; magma.scene.traverse(o => { if (o.isPointLight) pl++; if (o.material && o.material.isShaderMaterial && o.geometry && (o.name === 'tsunami' || (o.geometry.parameters && o.geometry.parameters.width === 700))) sh++ })
+    const ts = magma.scene.getObjectByName('tsunami'), pts = magma.scene.children.filter(o => o.isPoints)
+    return { sh, pl, verts: ts.geometry.attributes.position.count, points: pts.length, pointN: pts.reduce((a, o) => a + o.geometry.attributes.position.count, 0) }
+  })
+  expect(r.sh === 0 && r.pl === 0 && r.verts < 1000 && r.points === 2 && r.pointN <= 200, JSON.stringify(r)); return r
+})
+await t('津波に追いつかれるとゲームオーバー（飲まれる演出のあと結果）', async () => {
+  await p.evaluate(() => magma.start(11))
+  const r = await p.evaluate(async () => {
+    const g = magma.g; magma.dbg.step(30)
+    g.waveZ = g.p.z - 0.4
+    const t0 = performance.now(); let engulfMax = 0, hidden = false, frontPassed = false
+    while (magma.mode !== 'result' && performance.now() - t0 < 5000) {
+      await new Promise(r => requestAnimationFrame(r))
+      engulfMax = Math.max(engulfMax, +document.getElementById('engulf').style.opacity || 0)
+      if (magma.mode === 'over' && magma.front > g.p.z) frontPassed = true
+      if (frontPassed && !magma.scene.children.some(o => o.isGroup && o.visible && Math.abs(o.position.z - g.p.z) < 0.5 && o.children.some(c => c.isSkinnedMesh || c.type === 'Group'))) hidden = true
+    }
+    return { why: g.p.dead, mode: magma.mode, engulfMax, frontPassed, hidden, ms: Math.round(performance.now() - t0), resWhy: document.getElementById('resWhy').textContent, line: document.getElementById('resLine').textContent }
+  })
+  expect(r.why === 'wave' && r.mode === 'result' && r.engulfMax > 0.9 && r.frontPassed && r.resWhy === 'マグマの津波に飲まれた' && r.line.length > 0 && r.ms > 1500, JSON.stringify(r)); return r
+})
+await t('津波が遠ければ屋上で止まっていても大丈夫', async () => {
+  await p.evaluate(() => magma.start(11))
+  const r = await p.evaluate(() => { magma.dbg.pause(true); const g = magma.g; g.waveZ = g.p.z - 60; magma.dbg.step(60 * 3); magma.dbg.pause(false); return { over: g.over, gap: +(g.p.z - g.waveZ).toFixed(1), grounded: g.p.grounded } })
+  expect(!r.over && r.gap > 30 && r.grounded, JSON.stringify(r)); return r
+})
+await t('津波までの距離の表示が正しい・近いと点滅', async () => {
+  await p.evaluate(() => magma.start(11))
+  const r = await p.evaluate(() => {
+    magma.dbg.pause(true); const g = magma.g, out = []
+    for (const gap of [87.4, 41.6, 29.4, 3.2]) { g.waveZ = g.p.z - gap; magma.dbg.step(0); out.push([gap, document.getElementById('tsuM').textContent, document.getElementById('tsu').classList.contains('near')]) }
+    magma.dbg.pause(false); return out
+  })
+  const ok = r.every(([gap, txt, near]) => Number(txt) === Math.round(gap) && near === (Math.round(gap) < 30))
+  expect(ok, JSON.stringify(r)); return r.map(x => x.join(':')).join(' ')
+})
+await t('津波は130mより後ろに離れない（休み続けると追いつかれる）', async () => {
+  await p.evaluate(() => magma.start(11))
+  const r = await p.evaluate(() => { magma.dbg.pause(true); const g = magma.g; Object.assign(g.p, { z: 900, y: 30, vz: 0 }); g.waveZ = -45; magma.dbg.step(1); const gap = g.p.z - g.waveZ; magma.dbg.pause(false); return { gap: +gap.toFixed(1) } })
+  expect(r.gap <= 130.01 && r.gap > 120, JSON.stringify(r)); return r
 })
 await t('マグマに落ちたら終わり、結果に距離と自己ベストが出る', async () => {
   await p.evaluate(() => magma.start(11))
@@ -224,7 +304,7 @@ await t('マグマに落ちたら終わり、結果に距離と自己ベスト�
   const r = await p.evaluate(() => ({ why: document.getElementById('resWhy').textContent, m: document.getElementById('resM').textContent, best: localStorage.getItem('ms.best'), res: window.__lastResult }))
   expect(r.why === 'マグマに着地' && r.m === '120' && r.best === '120', JSON.stringify(r)); return r
 })
-await t('何もしないと溶岩の波に飲まれて最低の結果', async () => {
+await t('何もしないとマグマの津波に飲まれて最低の結果', async () => {
   await p.evaluate(() => { localStorage.setItem('ms.tut', '1'); magma.start(11) })
   const r = await p.evaluate(() => { magma.dbg.pause(true); magma.dbg.step(60 * 40); magma.dbg.pause(false); return { over: magma.g.over, why: magma.g.p.dead, m: Math.round(magma.g.p.maxZ), t: Math.round(magma.g.t) } })
   await p.waitForTimeout(1500)
@@ -241,6 +321,18 @@ await t('片手: 押している間つかみ、離すと放す', async () => {
   })
   await p.evaluate(() => magma.start(11, { easy: false }))
   expect(r.roped && r.released && r.easy && r.stickHidden, JSON.stringify(r)); return r
+})
+await t('長く進んでからやり直しても、スタートの周りに街がある（後ろにも）', async () => {
+  await p.evaluate(() => magma.start(11))
+  const r = await p.evaluate(() => {
+    const near = () => { let f = 0, bk = 0; for (const im of magma.scene.children.filter(o => o.isInstancedMesh)) for (let i = 0; i < im.count; i++) { const z = im.instanceMatrix.array[i * 16 + 14]; if (z > -20 && z < 200) f++; if (z < -60 && z > -240) bk++ } return [f, bk] }
+    magma.dbg.pause(true); const g = magma.g
+    for (let z = 0; z <= 4000; z += 50) { g.p.z = z; magma.dbg.step(0) }
+    const far = near()
+    magma.start(12); magma.dbg.step(0); const again = near(); magma.dbg.pause(false)
+    return { far, again }
+  })
+  expect(r.far[0] === 0 && r.again[0] > 10 && r.again[1] > 10, JSON.stringify(r)); return r
 })
 await t('進むと昼から夜へ暗くなる', async () => {
   await p.evaluate(() => magma.start(11))
@@ -275,7 +367,9 @@ for (const [w, h, name] of SIZES) {
   await q.waitForTimeout(600)
   views.title = await fit(q); await q.screenshot({ path: `${ROOT}/shots/fit-${name}-title.png` })
   await q.click('#btnHow'); views.how = await fit(q); await q.screenshot({ path: `${ROOT}/shots/fit-${name}-how.png` }); await q.click('#btnHowClose')
-  await q.click('#btnStart'); await q.waitForTimeout(900); views.play = await fit(q); await q.screenshot({ path: `${ROOT}/shots/fit-${name}-play.png` })
+  await q.click('#btnStart'); await q.waitForTimeout(2200); views.intro = await fit(q); await q.screenshot({ path: `${ROOT}/shots/fit-${name}-intro.png` })
+  await q.waitForFunction(() => magma.mode === 'play', null, { timeout: 6000 }); await q.evaluate(() => { magma.g.waveZ = magma.g.p.z - 18 }); await q.waitForTimeout(500)
+  views.play = await fit(q); await q.screenshot({ path: `${ROOT}/shots/fit-${name}-play.png` })
   await q.evaluate(() => magma.showResult()); await q.waitForFunction(() => magma.mode === 'result'); await q.waitForTimeout(300)
   views.result = await fit(q); await q.screenshot({ path: `${ROOT}/shots/fit-${name}-result.png` })
   await t(`一画面に収まり重ならない ${name} ${w}x${h}`, async () => {
@@ -289,9 +383,12 @@ await browser.close()
 // WebKit（iPhone の Safari 相当）
 const wk = await webkit.launch()
 const wp = await open(wk, { isMobile: true, hasTouch: true, deviceScaleFactor: 2 })
-await t('WebKit: タップで出発・ワイヤーボタン・スティック', async () => {
-  await wp.tap('#btnStart'); await wp.waitForTimeout(500)
+await t('WebKit: タップで出発・演出のあとワイヤーボタン・スティック', async () => {
+  await wp.tap('#btnStart'); await wp.waitForTimeout(300)
+  const intro = await wp.evaluate(() => magma.mode)
+  await wp.waitForFunction(() => magma.mode === 'play', null, { timeout: 6000 })
   const r0 = await wp.evaluate(() => magma.mode)
+  expect(intro === 'intro', 'intro ' + intro)
   const box = await wp.locator('#stick').boundingBox()
   await wp.evaluate(({ x, y }) => {
     const el = document.getElementById('stick')

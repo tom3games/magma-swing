@@ -1,8 +1,9 @@
 // 地面はマグマ（MAGMA SWING）の描画と入力。中身の計算は shared/sim.js
 import * as THREE from 'three'
-import { T } from './data.js'
-import { K, makeGame, step, pickHook, botInput, makeBot } from '../shared/sim.js'
-import { CharRunnerModel, loadCharAssets, charAssets } from './charmodel.js'
+import { T } from './data.js?v=3'
+import * as SIM from '../shared/sim.js?v=3'
+import { CharRunnerModel, loadCharAssets, charAssets } from './charmodel.js?v=3'
+const { K, makeGame, step, pickHook, botInput, makeBot } = SIM
 
 const $ = id => document.getElementById(id)
 const store = { get(k) { try { return localStorage.getItem(k) } catch (e) { return null } }, set(k, v) { try { localStorage.setItem(k, v) } catch (e) {} } }
@@ -17,6 +18,7 @@ Snd.def({
   wind: 'snd/wind.mp3', land: ['snd/land1.mp3', 'snd/land2.mp3'], thud: ['snd/thud1.mp3', 'snd/thud2.mp3'], cloth: 'snd/cloth.mp3',
   splash: ['snd/splash1.mp3', 'snd/splash2.mp3'], boom: 'snd/boom.mp3', miss: 'snd/miss.mp3', click: 'snd/click.mp3', ok: 'snd/ok.mp3',
   j_over: 'snd/j_over.mp3', j_best: 'snd/j_best.mp3', reel: ['snd/reel1.mp3', 'snd/reel2.mp3'], empty: 'snd/empty.mp3',
+  rumble: 'snd/rumble.mp3', crumble: 'snd/crumble.mp3',
 })
 const bgm = name => Snd.loop('bgm', name ? `snd/${name}.mp3` : null, name === 'bgm_play' ? 0.32 : 0.36)
 function soundStart() {
@@ -95,12 +97,14 @@ function putBuilding(b) { _m4.compose(_p0.set(b.x, b.y, b.z), _q0, _s0.set(b.w, 
     const side = i % 2 ? 1 : -1, mat = i % 4
     const w = 10 + rnd() * 14, d = 10 + rnd() * 16, h = 10 + rnd() * 38
     const off = 18 + rnd() * 26 + w / 2
-    const b = { side, w, h, d, off, mat, slot: cityIM[mat].count++, x: side * off, y: h / 2 - 6, z: -60 + Math.floor(i / 2) * 22 + rnd() * 6 }
-    city.push(b); putBuilding(b)
+    const b = { side, w, h, d, off, mat, slot: cityIM[mat].count++, x: side * off, y: h / 2 - 6, z: -230 + Math.floor(i / 2) * 22 + rnd() * 6 }
+    b.zStart = b.z; city.push(b); putBuilding(b)
   }
 }
+// やり直した時は街を最初の位置に戻す（前は前へ送るだけで、長く遊んだ後のやり直しで周りにビルが無かった）
+function resetCity() { for (const b of city) { b.z = b.zStart; putBuilding(b) } }
 function updateCity(z) {
-  for (const b of city) if (b.z < z - 80) { b.z += 35 * 22; putBuilding(b) }
+  for (const b of city) if (b.z < z - 240) { b.z += 35 * 22; putBuilding(b) }   // 後ろ 240m まで残す（始まりに振り返ると、津波が街を飲んで来るのが見える）
 }
 
 // ---------- コースの物（フック・休める屋上）
@@ -187,19 +191,102 @@ function clearCourse() {
 const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 5).translate(0, 0.5, 0).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4, metalness: 0.5 }))
 rope.visible = false; scene.add(rope)
 
-// 溶岩の波（後ろから来る壁）。板1枚＋縦のグラデーションの絵をずらすだけ
-function waveTex() {
-  const c = document.createElement('canvas'); c.width = 64; c.height = 256; const x = c.getContext('2d')
-  const g = x.createLinearGradient(0, 0, 0, 256)
-  g.addColorStop(0, 'rgba(255,140,40,0)'); g.addColorStop(0.25, 'rgba(255,150,50,.75)'); g.addColorStop(0.55, 'rgba(230,70,20,.95)'); g.addColorStop(1, 'rgba(120,25,10,1)')
-  x.fillStyle = g; x.fillRect(0, 0, 64, 256)
-  let s = 5; const r = () => (s = (s * 16807) % 2147483647) / 2147483647
-  for (let i = 0; i < 40; i++) { x.fillStyle = `rgba(255,${200 + r() * 50 | 0},120,${0.15 + r() * 0.25})`; x.fillRect(r() * 64, 60 + r() * 190, 2 + r() * 6, 10 + r() * 30) }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.repeat.set(6, 1); return t
+// マグマの津波（後ろから来る）。2026-11-02 本人「後ろから迫ってくる設定に。マグマの津波にしよう」
+// 重くしない（v2 で「重たい」と言われた）: 断面を横に伸ばした帯1枚（頂点を毎フレーム少し揺らす）＋絵をずらす＋粒は Points 2つ＋足もとの照り返し1枚。点光源・シェーダは使わない
+const TSU = {
+  // 断面（前の面が dz=0。dz は進む向き）。後ろの斜面、波頭、前へ巻き込む唇、前の面を下へ
+  prof: [[-48, -1], [-36, 4], [-26, 10], [-17, 16.5], [-10, 21.5], [-5, 24.6], [-1.5, 25.9], [1.6, 25.4], [3.6, 23.6], [4, 21.3], [2.9, 19.6], [1.2, 19.4], [0.2, 17.2], [-0.4, 12.5], [-0.2, 7], [0.3, 3], [0.4, -1]],
+  // 断面の各点の色（裏の黒いかさぶた、明るい波頭、前の面は赤く光る）
+  col: [[0.16, 0.04, 0.03], [0.24, 0.05, 0.03], [0.38, 0.07, 0.03], [0.62, 0.12, 0.03], [0.85, 0.24, 0.04], [0.98, 0.45, 0.08], [1, 0.72, 0.25], [1, 0.66, 0.2], [0.96, 0.42, 0.07], [0.78, 0.22, 0.04], [0.42, 0.08, 0.03], [0.28, 0.05, 0.03], [0.55, 0.1, 0.03], [0.82, 0.2, 0.04], [0.95, 0.32, 0.05], [1, 0.48, 0.1], [1, 0.62, 0.18]],
+  W: 200, SEG: 40,
 }
-const waveMat = new THREE.MeshBasicMaterial({ map: waveTex(), transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false })
-const wave = new THREE.Mesh(new THREE.PlaneGeometry(160, 34, 1, 1), waveMat)
-wave.position.y = 15; scene.add(wave)
+function tsuTex() {
+  // 流れ落ちる溶岩: 橙の地に、黒く冷えたかさぶたと明るい筋（縦長）
+  const c = document.createElement('canvas'); c.width = 128; c.height = 256; const x = c.getContext('2d')
+  x.fillStyle = '#fff'; x.fillRect(0, 0, 128, 256)
+  let s = 21; const r = () => (s = (s * 16807) % 2147483647) / 2147483647
+  const blob = (cx, cy, rx, ry, col) => { for (const ox of [-128, 0, 128]) for (const oy of [-256, 0, 256]) { x.save(); x.translate(cx + ox, cy + oy); x.scale(rx / ry, 1); const g = x.createRadialGradient(0, 0, 0, 0, 0, ry); g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(-ry, -ry, ry * 2, ry * 2); x.restore() } }
+  // 黒く冷えたかさぶた: 小さい粒を固めて、形のばらばらな板にする（丸い斑点に見えないように）
+  for (let i = 0; i < 16; i++) { const cx = r() * 128, cy = r() * 256, a = 0.45 + r() * 0.35; for (let k = 0; k < 9; k++) blob(cx + (r() - 0.5) * 26, cy + (r() - 0.5) * 40, 3 + r() * 5, 5 + r() * 9, `rgba(${12 + r() * 16 | 0},4,2,${a})`) }
+  for (let i = 0; i < 18; i++) blob(r() * 128, r() * 256, 1.5 + r() * 2.5, 12 + r() * 24, 'rgba(255,255,200,1)')   // 明るい筋
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(12, 3); return t
+}
+const _tc = new THREE.Color()
+const tsuGeo = (() => {
+  const P = TSU.prof, n = P.length, cols = TSU.SEG + 1
+  const pos = new Float32Array(n * cols * 3), col = new Float32Array(n * cols * 3), uv = new Float32Array(n * cols * 2), idx = []
+  let arc = [0]; for (let i = 1; i < n; i++) arc.push(arc[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]))
+  for (let j = 0; j < cols; j++) for (let i = 0; i < n; i++) {
+    const k = j * n + i
+    _tc.setRGB(...TSU.col[i], THREE.SRGBColorSpace); col.set([_tc.r, _tc.g, _tc.b], k * 3); uv[k * 2] = j / TSU.SEG; uv[k * 2 + 1] = arc[i] / arc[n - 1]
+    if (j < TSU.SEG && i < n - 1) { const a = k, b = k + 1, c2 = k + n, d = k + n + 1; idx.push(a, c2, b, b, c2, d) }
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(idx)
+  return g
+})()
+const tsuMat = new THREE.MeshBasicMaterial({ map: tsuTex(), vertexColors: true, side: THREE.DoubleSide, fog: false, toneMapped: false })
+const tsunami = new THREE.Mesh(tsuGeo, tsuMat); tsunami.name = 'tsunami'; tsunami.frustumCulled = false
+scene.add(tsunami)
+// 形を毎フレーム少し動かす（波頭の高さと唇の出っぱりが横に波打つ）。頂点は 17×41 = 697 個だけ
+function shapeTsunami(t, x0) {
+  const P = TSU.prof, n = P.length, pos = tsuGeo.attributes.position.array
+  for (let j = 0; j <= TSU.SEG; j++) {
+    const u = j / TSU.SEG, x = (u - 0.5) * TSU.W, wx = x + x0
+    const edge = Math.max(0.25, 1 - Math.max(0, Math.abs(x) - 55) / 45)   // 端は低く（街の外へなだらかに）
+    const hs = edge * (1 + 0.1 * Math.sin(wx * 0.09 + t * 1.3) + 0.06 * Math.sin(wx * 0.23 - t * 2.2))
+    const lip = 1.1 * Math.sin(wx * 0.06 + t * 0.9) + 0.5 * Math.sin(wx * 0.17 - t * 1.7)
+    for (let i = 0; i < n; i++) {
+      const k = (j * n + i) * 3, curl = i >= 7 && i <= 12 ? 1 : 0
+      pos[k] = x; pos[k + 1] = P[i][1] * hs; pos[k + 2] = P[i][0] + curl * lip
+    }
+  }
+  tsuGeo.attributes.position.needsUpdate = true
+}
+// 足もとの照り返し（津波の前のマグマが明るく光る）
+const tsuGlowTex = (() => { const c = document.createElement('canvas'); c.width = 4; c.height = 128; const x = c.getContext('2d'); const g = x.createLinearGradient(0, 0, 0, 128); g.addColorStop(0, 'rgba(255,170,60,.95)'); g.addColorStop(0.35, 'rgba(255,90,20,.45)'); g.addColorStop(1, 'rgba(255,60,10,0)'); x.fillStyle = g; x.fillRect(0, 0, 4, 128); return new THREE.CanvasTexture(c) })()
+const tsuGlow = new THREE.Mesh(new THREE.PlaneGeometry(TSU.W, 36).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: tsuGlowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, toneMapped: false }))
+tsuGlow.name = 'tsunamiGlow'; scene.add(tsuGlow)
+// 火の粉（加算）と煙（黒い粒）。どちらも Points 1つずつ
+function makeDots(n, tex, size, blending, color, opacity) {
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3).fill(-9999), 3))
+  const m = new THREE.PointsMaterial({ map: tex, size, sizeAttenuation: true, transparent: true, depthWrite: false, blending, color, opacity, fog: false, toneMapped: false })
+  const o = new THREE.Points(g, m); o.frustumCulled = false; scene.add(o)
+  return { o, pos: g.attributes.position, v: new Float32Array(n * 3), life: new Float32Array(n), n, k: 0 }
+}
+const smokeTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'); const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,255,255,.9)'); g.addColorStop(0.5, 'rgba(255,255,255,.35)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c) })()
+const tsuSparks = makeDots(150, glowTex, 1.3, THREE.AdditiveBlending, 0xffb050, 1)
+const tsuSmoke = makeDots(26, smokeTex, 16, THREE.NormalBlending, 0x2a2420, 0.55)
+tsuSmoke.o.renderOrder = 2
+function dotsSpawn(D, x, y, z, vx, vy, vz, life) { const i = D.k; D.k = (D.k + 1) % D.n; D.pos.setXYZ(i, x, y, z); D.v[i * 3] = vx; D.v[i * 3 + 1] = vy; D.v[i * 3 + 2] = vz; D.life[i] = life }
+function dotsStep(D, dt, grav) {
+  const a = D.pos.array
+  for (let i = 0; i < D.n; i++) {
+    if (D.life[i] <= 0) continue
+    D.life[i] -= dt; if (D.life[i] <= 0) { a[i * 3 + 1] = -9999; continue }
+    D.v[i * 3 + 1] -= grav * dt
+    a[i * 3] += D.v[i * 3] * dt; a[i * 3 + 1] += D.v[i * 3 + 1] * dt; a[i * 3 + 2] += D.v[i * 3 + 2] * dt
+  }
+  D.pos.needsUpdate = true
+}
+let tsuAcc = 0
+// 津波を置く。front = 前の面の z、v = 進む速さ、x0 = 横の中心
+function placeTsunami(front, v, x0, dt, t) {
+  tsunami.position.set(x0, 0, front)
+  shapeTsunami(t, x0)
+  tsuMat.map.offset.y = (tsuMat.map.offset.y + dt * 0.55) % 1   // 波頭を越えて前へ流れ落ちる
+  tsuMat.map.offset.x = (tsuMat.map.offset.x + dt * 0.01) % 1
+  tsuGlow.position.set(x0, 0.06, front + 18)
+  tsuAcc += dt
+  while (tsuAcc > 1 / 50) {   // 1秒に50回、火の粉と煙を少しずつ出す
+    tsuAcc -= 1 / 50
+    const sx = x0 + (Math.random() - 0.5) * 70
+    dotsSpawn(tsuSparks, sx, 22 + Math.random() * 4, front + 2 + Math.random() * 2, (Math.random() - 0.5) * 4, 3 + Math.random() * 7, v + 3 + Math.random() * 8, 0.8 + Math.random() * 0.9)
+    if (Math.random() < 0.5) dotsSpawn(tsuSparks, x0 + (Math.random() - 0.5) * 50, 0.5, front + 0.5, (Math.random() - 0.5) * 6, 5 + Math.random() * 6, v + 2 + Math.random() * 4, 0.6 + Math.random() * 0.5)   // 足もとのしぶき
+    if (Math.random() < 0.12) dotsSpawn(tsuSmoke, x0 + (Math.random() - 0.5) * 80, 24 + Math.random() * 3, front - 4 - Math.random() * 6, (Math.random() - 0.5) * 2, 3 + Math.random() * 2, v * 0.6, 3 + Math.random() * 2)
+  }
+  dotsStep(tsuSparks, dt, 12); dotsStep(tsuSmoke, dt, -0.4)
+}
 
 // 補充のリール（空中に浮かぶ）。ドラムは回転体1つ（両側の円盤と芯を1つの形に）＋光1枚。描くのは前方 140m だけ
 const reelMeshes = new Map()
@@ -266,6 +353,9 @@ let G = null, demo = null, demoBot = null
 let camYaw = 0, camUserT = 0, camPitch = 0
 const cam = { pos: new THREE.Vector3(0, 14, -10), look: new THREE.Vector3() }
 const tut = { on: false, stage: 0, t: 0 }
+// 始まりの演出: 後ろを振り返って津波を見せる。初回 3.2秒（飛ばせない）、2回目からは 1.8秒でタップで飛ばせる
+const intro = { t: 0, D: 3.2, long: true, phase: 0 }
+let engulf = 0, lastRumble = 0
 
 function applyLang() {
   document.documentElement.lang = S.lang
@@ -284,21 +374,35 @@ function show(id) { for (const s of ['title', 'hud', 'result']) $(s).hidden = s 
 
 function startDemo() {
   demo = makeGame(7, {}); demoBot = makeBot(1, 7); G = demo
-  clearCourse(); newModelIfNeeded()
+  clearCourse(); resetCity(); newModelIfNeeded()
 }
 function newModelIfNeeded() { if (!model || (charAssets.ready && !(model instanceof CharRunnerModel))) newModel() }
-function startPlay(seed) {
+function startPlay(seed, withIntro = true) {
   soundStart()
   const first = !store.get('ms.tut')
   G = makeGame(seed == null ? (Math.random() * 1e9) | 0 : seed, { easy: S.easy, tutorial: first ? 1 : 0 })
-  demo = null; clearCourse(); newModelIfNeeded()
-  S.mode = 'play'; S.paused = false; tut.on = first; tut.stage = 0; tut.t = 0
-  show('hud'); $('holdHint').hidden = !S.easy || !first
-  bgm('bgm_play'); Snd.play('ok', { vol: 0.5 })
+  demo = null; clearCourse(); resetCity(); newModelIfNeeded(); if (model) model.group.visible = true
+  S.paused = false; tut.on = first; tut.stage = 0; tut.t = 0; engulf = 0
+  once.wire = once.jump = false; once.aim = null; holdDown = false
+  show('hud'); $('holdHint').hidden = true; $('hud').classList.remove('over')
+  bgm('bgm_play')
   window.__lastResult = null
+  if (withIntro) {
+    S.mode = 'intro'; intro.t = 0; intro.phase = 0; intro.long = !store.get('ms.intro'); intro.D = intro.long ? 3.2 : 1.8
+    $('hud').classList.add('intro'); $('warnSkip').hidden = intro.long; $('warn').hidden = true
+    Snd.play('rumble', { vol: 1, rate: 0.75, jitter: 0 }); Snd.duck(0.3, intro.D)
+  } else endIntro(true)
+}
+function endIntro(silent) {
+  S.mode = 'play'; store.set('ms.intro', '1')
+  $('hud').classList.remove('intro'); $('warn').hidden = true
+  once.wire = once.jump = false; once.aim = null
+  $('holdHint').hidden = !S.easy || !tut.on
+  if (!silent) Snd.play('ok', { vol: 0.5 })
 }
 function endPlay() {
   S.mode = 'over'
+  $('hud').classList.add('over'); $('tip').hidden = true; $('holdHint').hidden = true
   const p = G.p, m = Math.round(p.maxZ)
   const isBest = m > S.best
   if (isBest) { S.best = m; store.set('ms.best', String(m)) }
@@ -309,13 +413,14 @@ function endPlay() {
     $('resWhy').textContent = p.dead === 'wave' ? L.whyWave : L.whyLava
     $('resM').textContent = m.toLocaleString()
     let line = L.lines[0][1]; for (const [d, s] of L.lines) if (m >= d) line = s
+    if (p.dead === 'wave') line = L.waveLines[Math.floor(G.t * 7 + m) % L.waveLines.length]   // 津波に飲まれた時は津波の一言
     $('resLine').textContent = line
     $('resStats').textContent = `${L.speed} ${Math.round(p.maxV * 3.6)} km/h ・ ${L.wires} ${p.wires} ・ ${L.chain} ${p.bestChain}`
     $('resBest').textContent = isBest && m > 0 ? L.newBest : `${L.best} ${Math.round(S.best).toLocaleString()} m`
     show('result'); S.mode = 'result'
     Snd.play(isBest && m > 0 ? 'j_best' : 'j_over', { vol: 0.8, jitter: 0 })
-    window.__lastResult = { m, why: p.dead, best: S.best, isBest }
-  }, 1100)
+    window.__lastResult = { m, why: p.dead, best: S.best, isBest, line }
+  }, p.dead === 'wave' ? 2000 : 1100)
   bgm(null)
 }
 function toTitle() { S.mode = 'title'; show('title'); startDemo(); bgm('bgm_title') }
@@ -331,6 +436,7 @@ addEventListener('keydown', e => {
     if (e.code === 'KeyE' || e.code === 'KeyF') once.wire = true
     if (e.code === 'Space') { if (S.easy) holdDown = true; else once.jump = true; e.preventDefault() }
   }
+  if (S.mode === 'intro' && /Space|Enter|KeyE|KeyF/.test(e.code)) { trySkipIntro(); e.preventDefault() }
   if (e.code === 'Escape' || e.code === 'KeyP') { if (S.mode === 'play') setPause(!S.paused) }
   if (e.code === 'KeyM') toggleMute()
 })
@@ -347,13 +453,15 @@ function moveStick(e) {
   stick.x = dx; stick.y = -dy
   $('stick').firstElementChild.style.transform = `translate(${dx * stick.r * 0.55}px,${dy * stick.r * 0.55}px)`
 }
-const press = (id, fn) => $(id).addEventListener('pointerdown', e => { e.preventDefault(); soundStart(); fn(); $(id).classList.add('on'); setTimeout(() => $(id).classList.remove('on'), 120) })
+const press = (id, fn) => $(id).addEventListener('pointerdown', e => { e.preventDefault(); soundStart(); if (S.mode !== 'play') return; fn(); $(id).classList.add('on'); setTimeout(() => $(id).classList.remove('on'), 120) })
 press('btnWire', () => { once.wire = true })
 press('btnJump', () => { once.jump = true })
 // 画面のタッチ: 軽く触る = そのフックへ、なぞる = カメラ。片手は押している間つかむ
 const gest = new Map()
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2()
+function trySkipIntro() { if (S.mode === 'intro' && !intro.long && intro.t > 0.25) { endIntro(); return true } return false }
 document.addEventListener('pointerdown', e => {
+  if (S.mode === 'intro') { trySkipIntro(); return }
   if (S.mode !== 'play' || S.paused) return
   if (e.target.closest && e.target.closest('button, a, .stick, .aux')) return
   soundStart()
@@ -432,7 +540,7 @@ function saveImage() {
 }
 
 // ---------- 出来事から音と演出
-let toastT = 0
+let toastT = 0, tsuShown = -1
 // ワイヤーの残り（ドラムに巻いたワイヤーの量＋本数）
 let reelShown = -1
 function drawReel(n) {
@@ -456,7 +564,7 @@ function handleEvents(g) {
     else if (e.t === 'dead') {
       const p = g.p
       if (e.why === 'lava') { Snd.play('splash', { vol: 1 }); Snd.play('boom', { vol: 0.6 }); burst(p.x, 0.3, p.z, 40, 9) }
-      else { Snd.play('boom', { vol: 0.9 }); burst(p.x, p.y + 1, p.z, 30, 8) }
+      else { Snd.play('rumble', { vol: 1, rate: 0.85, jitter: 0 }); Snd.play('crumble', { vol: 0.9 }); Snd.play('boom', { vol: 0.8, delay: 0.25 }); engulf = 0; cam.pos.set(p.x + 6, p.y + 7, p.z + 24); cam.look.set(p.x, p.y + 6, p.z - 6) }   // 前に回って、津波が人を越えてくる所を見せる
       Snd.duck(0.2, 1.5)
       if (g === G && S.mode === 'play') endPlay()
     }
@@ -522,11 +630,11 @@ function draw(dt) {
   const p = G.p
   syncCourse(G)
   syncItems(G)
-  lavaMat.map.offset.x += dt * 0.004; lavaMat.map.offset.y += dt * 0.002; waveMat.map.offset.y = (waveMat.map.offset.y - dt * 0.35) % 1
+  lavaMat.map.offset.x += dt * 0.004; lavaMat.map.offset.y += dt * 0.002
   lava.position.set(p.x, 0, p.z + 100)
   updateCity(p.z)
   // 人物
-  if (model && !(p.dead === 'lava' && G.t - (G.deadT || (G.deadT = G.t)) > 0.05)) model.update(adapter(p), dt)
+  if (model && !(p.dead && G.t - (G.deadT || (G.deadT = G.t)) > 0.05)) model.update(adapter(p), dt)
   // ワイヤー
   if (p.dead === 'lava' && model) { model.group.position.y = Math.max(-1.6, model.group.position.y - dt * 0.8) }
   if (p.rope && model && !p.dead) {
@@ -548,30 +656,80 @@ function draw(dt) {
     m.userData.ring.rotation.z += dt * (target ? 3 : 0.6)
     if (m.userData.lamp) m.userData.lamp.emissiveIntensity = (window.__night || 0) * 2.5
   }
-  // 溶岩の波
-  wave.position.set(p.x, 15, G.waveZ)
-  const gapW = p.z - G.waveZ
   { const t2 = performance.now() / 1000; for (const m of reelMeshes.values()) { m.rotation.y = t2 * 1.8; m.position.y += Math.sin(t2 * 2 + m.position.z) * 0.004 } }
-  const heat = Math.max(0, Math.min(1, 1 - (gapW - 6) / 40))
-  $('heat').style.opacity = S.mode === 'play' ? heat.toFixed(2) : 0
-  if (Snd.ctx && S.mode === 'play') { if (!Snd._fireOn) { Snd._fireOn = true; Snd.loop('fire', 'snd/fire_wave.mp3', 0.0001, 0.3) } const l = Snd.loops.fire; if (l && l.g) l.g.gain.value = 0.05 + heat * 0.7 }
+  // マグマの津波（見た目の前の面）。演出中は遠くから迫って本当の位置まで来る。飲まれた時は人を越えて進む
+  let front = G.waveZ, ia = 0, shake = 0
+  if (S.mode === 'intro') {
+    intro.t += dt
+    const sc = intro.D / 3.2, ti = intro.t / sc
+    const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x)
+    ia = Math.PI * (ti < 2.4 ? ease(ti / 0.8) : 1 - ease((ti - 2.4) / 0.8))
+    front = G.waveZ - 170 * (1 - ease(Math.min(1, ti / 2.5)) ** 0.7)
+    shake = 0.12 + 0.18 * ease(ti / 2.4)
+    const ph = ti < 0.35 ? 0 : ti < 1.75 ? 1 : 2
+    if (ph !== intro.phase) {
+      intro.phase = ph; $('warn').hidden = ph === 0
+      $('warnText').textContent = ph === 1 ? TT().warn1 : TT().warn2
+      $('warn').classList.toggle('run', ph === 2)
+      if (ph === 1) Snd.play('crumble', { vol: 0.6, rate: 0.8 })
+    }
+    if (intro.t >= intro.D) endIntro()
+  } else if (p.dead === 'wave') {
+    engulf = Math.min(3, engulf + dt); front = G.waveZ - 6 + engulf * 16   // 少し後ろから出して、人を越える所を見せる
+    if (model && front > p.z + 1) model.group.visible = false
+  }
+  placeTsunami(front, S.mode === 'intro' ? 30 : G.waveV, p.x, dt, performance.now() / 1000)
+  const gapW = p.z - front
+  const heat = Math.max(0, Math.min(1, 1 - (gapW - 8) / 50))
+  const live = S.mode === 'play' || S.mode === 'over' || S.mode === 'intro'
+  $('heat').style.opacity = live ? Math.max(heat, S.mode === 'intro' ? 0.35 : 0).toFixed(2) : 0
+  if (S.mode === 'play') {
+    shake = heat * heat * 0.3
+    if (heat > 0.3 && !window.__noEmbers && Math.random() < heat * 0.45) dotsSpawn(tsuSparks, camera.position.x + (Math.random() - 0.5) * 18, camera.position.y + 2 + Math.random() * 7, camera.position.z + 8 + Math.random() * 12, (Math.random() - 0.5) * 3, -1 - Math.random() * 3, G.waveV + 2 + Math.random() * 4, 1 + Math.random() * 0.6)
+  }
+  if (p.dead === 'wave') shake = 0.45
+  if (Snd.ctx && (S.mode === 'play' || S.mode === 'intro')) {
+    if (!Snd._fireOn) { Snd._fireOn = true; Snd.loop('fire', 'snd/fire_wave.mp3', 0.0001, 0.3) }
+    const l = Snd.loops.fire; if (l && l.g) l.g.gain.value = 0.05 + (S.mode === 'intro' ? 0.4 : heat * 0.7)
+    // 近いと地鳴りが重なる（5秒に1回まで）
+    const nowS = performance.now() / 1000
+    if (S.mode === 'play' && heat > 0.5 && nowS - lastRumble > 5) { lastRumble = nowS; Snd.play('rumble', { vol: 0.2 + heat * 0.5, rate: 0.7 }) }
+  }
   else if (Snd._fireOn && S.mode !== 'play' && S.mode !== 'over') { Snd._fireOn = false; Snd.loop('fire', null) }
   // 光
   sun.position.set(p.x + 20, p.y + 40, p.z - 10); sun.target.position.set(p.x, p.y, p.z + 4)
   dayF += ((Math.min(1, p.maxZ / 1600)) - dayF) * Math.min(1, dt * 2)
   applyDaytime(dayF)
-  // カメラ（後ろから追う。なぞると回る。少しすると戻る）
-  if (performance.now() - camUserT > 1800) { camYaw *= 1 - Math.min(1, dt * 1.5); camPitch *= 1 - Math.min(1, dt * 1.5) }
   const land = innerWidth > innerHeight
   const sp = Math.hypot(p.vx, p.vy, p.vz)
-  const back = (land ? 9 : 10.5) + Math.min(5, sp * 0.12), up = 3.4 + camPitch * 6 + Math.min(2, sp * 0.04)
-  const cy = Math.cos(camYaw), sy = Math.sin(camYaw)
-  _v.set(p.x - sy * back, Math.max(1.2, p.y + up), p.z - cy * back)
-  const k = 1 - Math.exp(-dt * (S.mode === 'over' ? 1.5 : 6))
-  cam.pos.lerp(_v, k)
-  _w.set(p.x + sy * 8, p.y + 1.6, p.z + cy * 8)
-  cam.look.lerp(_w, 1 - Math.exp(-dt * 8))
-  if (!window.__freeze) { camera.position.copy(cam.pos); camera.lookAt(cam.look) }
+  if (S.mode === 'intro') {
+    // 振り返る: 人のまわりを横から回って前に出て、後ろ（津波）を見る
+    const sa = Math.sin(ia), back2 = Math.sin(ia / 2) ** 2
+    _v.set(p.x + sa * 6 + back2 * 6, p.y + 3.5 + back2 * 5, p.z - Math.cos(ia) * (10 + back2 * 6))
+    _w.set(p.x + sa * 2 - back2 * 4, p.y + 1.6 + back2 * 9, p.z + Math.cos(ia) * (8 + 32 * back2))   // 少し斜めから見て、波頭が前へ巻き込む形が分かるように
+    cam.pos.lerp(_v, 1 - Math.exp(-dt * 9)); cam.look.lerp(_w, 1 - Math.exp(-dt * 9))
+  } else if (p.dead === 'wave') {
+    // 飲まれる一瞬は前に回って、津波が人を越えてくるのを見せる
+    _v.set(p.x + 6, p.y + 7, p.z + 24); _w.set(p.x, p.y + 6, p.z - 6)
+    cam.pos.lerp(_v, 1 - Math.exp(-dt * 4)); cam.look.lerp(_w, 1 - Math.exp(-dt * 6))
+  } else {
+    // カメラ（後ろから追う。なぞると回る。少しすると戻る）
+    if (performance.now() - camUserT > 1800) { camYaw *= 1 - Math.min(1, dt * 1.5); camPitch *= 1 - Math.min(1, dt * 1.5) }
+    const back = (land ? 9 : 10.5) + Math.min(5, sp * 0.12), up = 3.4 + camPitch * 6 + Math.min(2, sp * 0.04)
+    const cy = Math.cos(camYaw), sy = Math.sin(camYaw)
+    _v.set(p.x - sy * back, Math.max(1.2, p.y + up), p.z - cy * back)
+    _v.z = Math.max(_v.z, Math.min(G.waveZ + 3, p.z - 2))   // 津波の中にカメラが入らない（入ると前が見えない）。人より前には出ない
+    const k = 1 - Math.exp(-dt * (S.mode === 'over' ? 1.5 : 6))
+    cam.pos.lerp(_v, k)
+    _w.set(p.x + sy * 8, p.y + 1.6, p.z + cy * 8)
+    cam.look.lerp(_w, 1 - Math.exp(-dt * 8))
+  }
+  if (!window.__freeze) {
+    camera.position.copy(cam.pos); camera.lookAt(cam.look)
+    if (shake > 0.01 && !window.__noShake) { camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake }
+  }
+  // 飲まれた: 津波が画面まで来たら真っ赤に
+  $('engulf').style.opacity = p.dead === 'wave' ? Math.max(0, Math.min(1, (front - camera.position.z + 2) / 3)).toFixed(2) : 0
   const fov = 62 + Math.min(14, sp * 0.35)
   camera.fov += (fov - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix()
   sky.position.copy(camera.position)
@@ -580,6 +738,8 @@ function draw(dt) {
   if (S.mode === 'play') {
     $('dist').textContent = Math.round(p.maxZ).toLocaleString()
     drawReel(p.left)
+    const tg = Math.max(0, Math.round(p.z - G.waveZ))
+    if (tg !== tsuShown) { tsuShown = tg; $('tsuM').textContent = tg; $('tsu').classList.toggle('near', tg < 30) }
     // チュートリアル（文字は1つだけ）
     if (tut.on) {
       tut.t += dt
@@ -610,8 +770,9 @@ addEventListener('pointerdown', () => { soundStart(); if (S.mode === 'title') bg
 
 // 検証用の窓口
 window.magma = {
-  get g() { return G }, get mode() { return S.mode }, S, camera, scene, renderer,
-  start: (seed, opts = {}) => { if (opts.easy != null) { S.easy = !!opts.easy; applyLang() } startPlay(seed) },
+  get g() { return G }, get mode() { return S.mode }, S, camera, scene, renderer, sim: SIM,   // 検証は magma.sim を使う（?v= 付きと別の物を読まないように）
+  start: (seed, opts = {}) => { if (opts.easy != null) { S.easy = !!opts.easy; applyLang() } startPlay(seed, !!opts.intro) },   // 検証は演出なしが既定
+  intro, skipIntro: () => trySkipIntro(), get front() { return tsunami.position.z },
   showResult: () => { if (G) { G.p.dead = G.p.dead || 'lava'; G.over = true; endPlay() } },
   input: once, setHold: v => { holdDown = v }, setStick: (x, y) => { stick.x = x; stick.y = y },
   dbg: {

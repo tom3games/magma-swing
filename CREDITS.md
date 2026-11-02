@@ -28,3 +28,5 @@
 - snd/reel1.mp3: 50 RPG sound effects / Kenney / CC0
 - snd/reel2.mp3: 50 RPG sound effects / Kenney / CC0
 - snd/empty.mp3: Interface Sounds / Kenney / CC0
+- snd/rumble.mp3: 100 CC0 SFX #2 / rubberduck / CC0
+- snd/crumble.mp3: 75 CC0 breaking / falling / hit sfx / rubberduck / CC0

@@ -15,7 +15,8 @@ export const K = {
   TUG: 9, REEL: 1.2, MINLEN: 7, SAFE: 4.5,
   LAVA: 0.25,
   DRAG: 0.004,
-  WAVE0: 6, WAVEA: 0.09, WAVEMAX: 30,   // 後ろから来る溶岩の波（m/秒、毎秒これだけ速くなる、上限）
+  WAVE0: 6, WAVEA: 0.09, WAVEMAX: 30,   // 後ろから来るマグマの津波（m/秒、毎秒これだけ速くなる、上限）
+  WAVEGAP: 130,     // 津波はこれ以上は離れない（貯金で休み続けられないように。2026-11-02 本人「ゆっくり進んでたら当たってゲームオーバー」）
   WIRE0: 10, WIREMAX: 12, REFILL: 2, PICK: 6.5,   // ワイヤーの残り本数（掛けるたびに1減る）、補充のリールで増える数、拾える距離
   DT: 1 / 60,
 }
@@ -140,6 +141,7 @@ export function step(g, inp = {}) {
   g.waveV = Math.min(K.WAVEMAX, K.WAVE0 + g.t * K.WAVEA)
   if (g.tutorial && g.t < 12) g.waveV = 2.5
   g.waveZ += g.waveV * dt
+  if (g.waveZ < p.z - K.WAVEGAP) g.waveZ = p.z - K.WAVEGAP
   extend(g.C, p.z + 260); trim(g.C, Math.min(p.z, g.waveZ))
 
   let mx = inp.mx || 0, my = inp.my || 0

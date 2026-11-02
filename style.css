@@ -10,7 +10,8 @@ button{font-family:inherit;color:inherit;cursor:pointer;border:0;background:none
 a{color:inherit}
 #view{position:fixed;inset:0}
 #view canvas{display:block;width:100%;height:100%}
-#heat{position:fixed;inset:0;pointer-events:none;z-index:2;opacity:0;background:radial-gradient(130% 70% at 50% 120%,rgba(255,90,20,.75),rgba(255,60,10,.25) 45%,transparent 70%)}
+#heat{position:fixed;inset:0;pointer-events:none;z-index:2;opacity:0;will-change:opacity;background:linear-gradient(180deg,rgba(255,110,20,.7),rgba(255,70,10,.25) 22%,transparent 42%),radial-gradient(120% 100% at 50% 50%,transparent 50%,rgba(210,35,0,.7) 100%)}
+#engulf{position:fixed;inset:0;pointer-events:none;z-index:3;opacity:0;will-change:opacity;background:radial-gradient(90% 80% at 50% 40%,#ffb43a,#e2400f 55%,#5a1206)}
 
 .screen{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:max(14px,env(safe-area-inset-top)) 16px max(14px,env(safe-area-inset-bottom))}
 .modal{justify-content:center;background:rgba(10,8,8,.55)}
@@ -107,3 +108,24 @@ body.easy .stick,body.easy .tb{display:none}
 .reel.bump{animation:reelBump .3s}
 @keyframes reelUp{40%{transform:scale(1.18)}}
 @keyframes reelBump{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+
+/* 津波までの距離: 警戒標識（黄色のひし形）＋白い補助標識 */
+.tsu{position:absolute;left:max(12px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + clamp(46px,6.4vmin,62px) + clamp(44px,6vmin,56px));display:flex;align-items:center;gap:4px;background:var(--white);color:var(--ink);border:2px solid var(--ink);border-radius:2px;padding:2px 8px 2px 3px;font-weight:700;font-size:12px}
+.tsu svg{width:28px;height:28px;flex:none}
+.tsu .dia{fill:#f6c21c;stroke:#141414;stroke-width:2}
+.tsu .wv{fill:#141414}
+.tsu b{font-family:var(--num);font-size:22px;line-height:1;margin-left:2px;min-width:2ch;text-align:right}
+.tsu i{font-style:normal;font-family:var(--num);font-size:14px}
+.tsu.near{background:#d8261a;color:#fff;border-color:#fff;animation:tsuBlink .5s steps(1) infinite}
+@keyframes tsuBlink{50%{background:var(--white);color:var(--ink);border-color:var(--ink)}}
+
+/* 始まりの演出: 道路の警戒標識が立つ */
+.warn{position:absolute;left:50%;top:18%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;animation:warnIn .25s ease-out}
+.warn-dia{width:clamp(96px,22vmin,140px);height:auto;filter:drop-shadow(0 4px 8px rgba(0,0,0,.45))}
+.warn-plate{background:var(--white);color:var(--ink);border:3px solid var(--ink);border-radius:2px;padding:4px 16px;font-weight:700;font-size:clamp(20px,4.4vmin,30px);white-space:nowrap}
+.warn.run .warn-plate{background:#d8261a;color:#fff;border-color:#fff;font-size:clamp(28px,6.4vmin,44px);letter-spacing:.3em;padding-left:calc(16px + .3em)}
+.warn-skip{font-size:12px;opacity:.85;text-shadow:0 1px 4px #000;margin-top:2px}
+@keyframes warnIn{from{transform:translate(-50%,-14px) rotate(-6deg);opacity:0}}
+#hud.intro .stick,#hud.intro .tb,#hud.intro .hud-r,#hud.intro .tsu,#hud.over .stick,#hud.over .tb,#hud.over .hud-r,#hud.over .tsu{opacity:0;pointer-events:none}
+#hud .stick,#hud .tb,#hud .hud-r,#hud .tsu{transition:opacity .3s}
+@media (max-height:480px){.warn{top:10%}.warn-dia{width:84px}}

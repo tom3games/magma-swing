@@ -1,4 +1,4 @@
-// SNS 用の画像 og.png（1200x630）。振り子で溶岩の上を飛んでいる場面＋案内標識のタイトル。node og.mjs
+// SNS 用の画像 og.png（1200x630）。振り子で飛ぶ人と、すぐ後ろに迫るマグマの津波＋案内標識のタイトル。node og.mjs
 import { chromium } from 'playwright'
 import { spawn } from 'node:child_process'
 import { muteContext, MUTE_LAUNCH } from './mute.mjs'
@@ -11,7 +11,7 @@ await p.goto('http://localhost:5394/'); await p.waitForFunction(() => window.__m
 await p.waitForFunction(() => document.getElementById('loading').hidden, null, { timeout: 20000 })
 await p.evaluate(() => { localStorage.setItem('ms.tut', '1'); magma.start(5) }); await p.waitForTimeout(600)
 await p.evaluate(async () => {
-  const { botInput, makeBot, step } = await import('./shared/sim.js')
+  const { botInput, makeBot, step } = magma.sim
   const B = makeBot(1, 5); magma.dbg.pause(true)
   const g = magma.g
   // 夕方まで進めて、振り子の一番速い所で止める
@@ -19,7 +19,10 @@ await p.evaluate(async () => {
   for (let i = 0; i < 90; i++) magma.dbg.step(0)
   window.__freeze = true
   const c = magma.camera, P = g.p
-  c.position.set(P.x - 7, P.y + 1.2, P.z - 4); c.lookAt(P.x + 1.5, P.y + 3.5, P.z + 9); c.fov = 58; c.updateProjectionMatrix()
+  // 前から振り返って、すぐ後ろに迫るマグマの津波と人を一緒に撮る
+  g.waveZ = P.z - 16; window.__noShake = true
+  for (let i = 0; i < 40; i++) magma.dbg.step(0)
+  c.position.set(P.x + 4, P.y + 0.5, P.z + 6.5); c.lookAt(P.x - 3.5, P.y + 4.5, P.z - 9); c.fov = 62; c.updateProjectionMatrix()
   magma.dbg.step(0)
   for (const id of ['hud', 'title']) document.getElementById(id).hidden = true
   document.getElementById('heat').style.opacity = 0
@@ -31,7 +34,7 @@ await p.evaluate(async () => {
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:24px;letter-spacing:.18em;opacity:.85">MAGMA SWING</div>
     </div>
     <div style="width:18px;height:40px;margin-left:226px;background:linear-gradient(90deg,#6c6f73,#b9bcc0 45%,#55585c)"></div>
-    <div style="font-weight:700;font-size:30px;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.9);line-height:1.45">地面に着いたら終わり。<br>ワイヤーで溶岩の上を飛べ。</div></div>`
+    <div style="font-weight:700;font-size:30px;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.9);line-height:1.45">後ろからマグマの津波。<br>ワイヤーで逃げ切れ。</div></div>`
   document.body.appendChild(d)
 })
 await p.waitForTimeout(700)

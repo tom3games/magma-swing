@@ -13,14 +13,14 @@ const cdp = await ctx.newCDPSession(p); await cdp.send('Emulation.setCPUThrottli
 await p.goto(`http://localhost:${PORT}/`); await p.waitForFunction(() => window.__magmaReady, null, { timeout: 30000 })
 await p.evaluate(() => magma.start(3)); await p.waitForTimeout(1500)
 // bot に遊ばせ続ける（振り子中の普通の場面を測る）
-await p.evaluate(async () => { const m = await import('./shared/sim.js'); const B = m.makeBot(1, 3); window.__botOn = true; const loop = () => { const g = magma.g; if (window.__botOn && g && !g.over) { magma.S.mode = 'play'; } requestAnimationFrame(loop) }; window.__B = B; window.__sim = m })
+await p.evaluate(async () => { const m = magma.sim; const B = m.makeBot(1, 3); window.__botOn = true; const loop = () => { const g = magma.g; if (window.__botOn && g && !g.over) { magma.S.mode = 'play'; } requestAnimationFrame(loop) }; window.__B = B; window.__sim = m })
 const cases = process.argv[2] === 'quick' ? ['all'] : ['all', '-lavaShader', '-wave', '-pointLights', '-shadow', '-allLava', '-reels', '-city']
 const out = []
 for (const c of cases) {
   const r = await p.evaluate(async (c) => {
     const S = magma.scene, R = magma.renderer
     const lava = S.children.find(o => o.geometry && o.geometry.parameters && o.geometry.parameters.width === 700)
-    const wave = S.children.find(o => o.geometry && o.geometry.parameters && o.geometry.parameters.width === 160)
+    const wave = S.children.find(o => o.name === 'tsunami')
     const pls = S.children.filter(o => o.isPointLight)
     const save = { lv: lava && lava.visible, wv: wave && wave.visible, pl: pls.map(l => l.visible), sh: R.shadowMap.enabled }
     if (c === '-lavaShader' || c === '-allLava') lava && (lava.visible = false)
