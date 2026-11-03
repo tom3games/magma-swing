@@ -222,7 +222,7 @@ await t('地面ワイヤー: 地面（屋上）に立っている時は、屋上
   })
   expect(r.rope !== 'ground', JSON.stringify(r)); return r
 })
-await t('地面ワイヤー: 空中で屋上をタップすると掛かって加速し、近くで外れて上へ跳ねる（瞬間移動しない・最高速を超えない）', async () => {
+await t('地面ワイヤー: 空中で屋上をタップすると掛かってすぐ加速（0.3秒で25m/秒）し、近くで外れてそのまま着地する（跳ねない・瞬間移動しない・最高速を超えない）', async () => {
   await p.evaluate(() => magma.start(22)); await p.evaluate(GW)
   const r = await p.evaluate(() => {
     const { g, p, b, cx } = __gwSetup(), K = magma.sim.K
@@ -230,20 +230,24 @@ await t('地面ワイヤー: 空中で屋上をタップすると掛かって加
     const left0 = p.left
     magma.input.aim = __gwAim(p, tx, ty, tz); magma.dbg.step(1)
     const rope = p.rope && { ...p.rope }
-    let maxStep = 0, maxV = 0, ratio = 0, v0 = Math.hypot(p.vx, p.vy, p.vz), relD = null, relVy = null, frames = 0, stillRoped = 0
-    for (let i = 0; i < 200 && p.rope && p.rope.ground; i++) {
-      const x = p.x, y = p.y, z = p.z
-      magma.dbg.step(1); frames++
+    let maxStep = 0, maxV = 0, ratio = 0, t = K.DT, t25 = null, relD = null, relY = null, rise = 0, frames = 0, landed = false, upAfterLand = 0
+    for (let i = 0; i < 300; i++) {
+      const x = p.x, y = p.y, z = p.z, roped = !!(p.rope && p.rope.ground)
+      magma.dbg.step(1); frames++; t += K.DT
       const st = Math.hypot(p.x - x, p.y - y, p.z - z), v = Math.hypot(p.vx, p.vy, p.vz)
-      maxStep = Math.max(maxStep, st); maxV = Math.max(maxV, v); ratio = Math.max(ratio, st / (Math.max(v, 0.01) * K.DT))
-      if (frames === 20) window.__gwShot = true
-      if (!p.rope) { relD = Math.hypot(tx - p.x, ty - (p.y + 1.2), tz - p.z); relVy = p.vy }
+      maxStep = Math.max(maxStep, st); if (!p.cling) ratio = Math.max(ratio, st / (Math.max(v, 0.01) * K.DT))
+      if (roped) { maxV = Math.max(maxV, v); if (t25 == null && v >= 25) t25 = t }
+      if (roped && !p.rope) { relD = Math.hypot(tx - p.x, ty - (p.y + 1.2), tz - p.z); relY = p.y }
+      if (relY != null && !landed) rise = Math.max(rise, p.y - relY)
+      if (p.grounded) landed = true
+      if (landed) upAfterLand = Math.max(upAfterLand, p.vy)
+      if (landed && frames > 60) break
     }
-    const out = { cling: !!p.cling, ground: !!(rope && rope.ground), used: left0 - p.left, frames, v0: +v0.toFixed(1), maxV: +maxV.toFixed(1), maxStep: +maxStep.toFixed(3), ratio: +ratio.toFixed(3), relD: relD && +relD.toFixed(1), relVy: relVy && +relVy.toFixed(1), landed: p.grounded }
+    const out = { ground: !!(rope && rope.ground), used: left0 - p.left, t25: t25 && +t25.toFixed(2), maxV: +maxV.toFixed(1), ratio: +ratio.toFixed(3), relD: relD && +relD.toFixed(1), rise: +rise.toFixed(2), landed, upAfterLand }
     magma.dbg.pause(false); return out
   })
-  const K_VMAX = 44   // 今の上手い bot の最高速の最大（sim.js の K.VMAX）。重力の1ステップ分（0.34）は超えてよい
-  expect(r.ground && r.used === 1 && r.maxV > r.v0 + 5 && r.maxV <= K_VMAX + 0.34 && r.ratio < 1.05 && r.frames < 200 && r.relD != null && r.relD < 6 && r.relVy >= 7, JSON.stringify(r)); return r
+  const K_VMAX = 44   // sim.js の K.VMAX（今の上手い bot の最高速の最大）。重力の1ステップ分は超えてよい
+  expect(r.ground && r.used === 1 && r.t25 != null && r.t25 <= 0.3 && r.maxV >= 30 && r.maxV <= K_VMAX + 0.34 && r.ratio < 1.05 && r.relD != null && r.relD < 6 && r.rise <= 0.05 && r.landed && r.upAfterLand <= 0, JSON.stringify(r)); return r
 })
 await t('地面ワイヤー: 掛けている所の画面（縦）', async () => {
   await p.evaluate(() => magma.start(22)); await p.evaluate(GW)

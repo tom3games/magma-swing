@@ -1,8 +1,8 @@
 // 地面はマグマ（MAGMA SWING）の描画と入力。中身の計算は shared/sim.js
 import * as THREE from 'three'
-import { T } from './data.js?v=8'
-import * as SIM from '../shared/sim.js?v=8'
-import { CharRunnerModel, loadCharAssets, charAssets } from './charmodel.js?v=8'
+import { T } from './data.js?v=9'
+import * as SIM from '../shared/sim.js?v=9'
+import { CharRunnerModel, loadCharAssets, charAssets } from './charmodel.js?v=9'
 const { K, makeGame, step, pickHook, botInput, makeBot } = SIM
 
 const $ = id => document.getElementById(id)

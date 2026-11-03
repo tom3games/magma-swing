@@ -21,7 +21,8 @@ export const K = {
   WIRE0: 10, WIREMAX: 12, REFILL: 2, PICK: 6.5,   // ワイヤーの残り本数（掛けるたびに1減る）、補充のリールで増える数、拾える距離
   // 地面ワイヤー（2026-11-03 本人「空中に浮いてる間は地面にもワイヤーつけて加速できるように」「地面をちゃんとタップしなあかん感じに」。ワイヤー系共通）
   // 空中で屋上（マグマでない地面）をタップした時だけ掛かる。点へ加速し、近くか通り過ぎたら外れて前と上へ跳ねる
-  groundWireAcc: 30, groundWireRelease: 4, groundWireKick: 4, groundWireHop: 7, groundWireMaxT: 3,
+  // 2026-11-03 本人「あんまり加速できない」「地面に着いてからバウンドする。現実的におかしい」→ 掛けた瞬間に Boost、Acc 30→48、跳ねるのは床から HopAbove より上で外れた時だけ（Hop 7→3.5）
+  groundWireAcc: 48, groundWireBoost: 9, groundWireRelease: 4, groundWireKick: 4, groundWireHop: 3.5, groundWireHopAbove: 3, groundWireMaxT: 3,
   VMAX: 44,         // 地面ワイヤーで足せる速さの上限（今の上手い bot の最高速 40 回の最大 44m/秒。これ以上は速くしない）
   DT: 1 / 60,
 }
@@ -146,6 +147,10 @@ function attach(g, aim) {
       const cy = p.y + 1.2, d = len3(gh.x - p.x, gh.y - cy, gh.z - p.z)
       if (d > K.RANGE || gh.y > p.y - 1) { g.events.push({ t: 'miss', ground: true, far: d > K.RANGE }); return false }
       p.rope = { x: gh.x, y: gh.y, z: gh.z, len: d, h: -1, t: 0, ground: true }
+      // 掛けた瞬間に点の向きへ足す（最高速 VMAX で頭打ち。もともと速い時はその速さより速くしない）
+      const s0 = Math.hypot(p.vx, p.vy, p.vz), bk = K.groundWireBoost / d
+      p.vx += (gh.x - p.x) * bk; p.vy += (gh.y - cy) * bk; p.vz += (gh.z - p.z) * bk
+      const s1 = Math.hypot(p.vx, p.vy, p.vz), cap = Math.max(s0, K.VMAX); if (s1 > cap) { const k = cap / s1; p.vx *= k; p.vy *= k; p.vz *= k }
       p.wires++; p.left--
       g.events.push({ t: 'wire', x: gh.x, y: gh.y, z: gh.z, d, ground: true })
       return true
@@ -163,6 +168,7 @@ function attach(g, aim) {
 }
 function release(g, byJump) {
   const p = g.p; if (!p.rope) return
+  if (p.rope.ground && !byJump) { groundRelease(g); return }   // 地面ワイヤーをボタンで離した時も、床の近くなら跳ねない
   p.rope = null
   // 離した瞬間の小さな後押し（気持ちよさ）
   if (p.vy > -3) p.vy += byJump ? 4 : 2.5
@@ -171,10 +177,15 @@ function release(g, byJump) {
 }
 
 // 地面ワイヤーが外れる: 進む向きに少し足して上へ跳ねる（スリングショット）
+// 足元の床の高さ（屋上の上ならその高さ、それ以外はマグマ）
+function floorAt(g, p) { let f = K.LAVA; for (const b of g.C.boxes) if (p.x > b.x0 - 0.4 && p.x < b.x1 + 0.4 && p.z > b.z0 - 0.4 && p.z < b.z1 + 0.4 && b.y1 <= p.y + 0.5) f = Math.max(f, b.y1); return f }
 function groundRelease(g) {
   const p = g.p, hv = Math.hypot(p.vx, p.vz)
-  if (hv > 0.1) { p.vx += p.vx / hv * K.groundWireKick; p.vz += p.vz / hv * K.groundWireKick }
-  p.vy = Math.max(p.vy, K.groundWireHop)
+  if (p.y - floorAt(g, p) > K.groundWireHopAbove) {
+    // 空中で外れた: 進む向きに少し足して低い山なり
+    if (hv > 0.1) { p.vx += p.vx / hv * K.groundWireKick; p.vz += p.vz / hv * K.groundWireKick }
+    p.vy = Math.max(p.vy, K.groundWireHop)
+  } else p.vy = Math.min(p.vy, 0)   // 床の近くで外れた: 跳ねずにそのまま着地（水平の勢いは残す）
   const sp = Math.hypot(p.vx, p.vy, p.vz); if (sp > K.VMAX) { const k = K.VMAX / sp; p.vx *= k; p.vy *= k; p.vz *= k }
   p.rope = null
   g.events.push({ t: 'release', v: sp, ground: true, auto: true })
