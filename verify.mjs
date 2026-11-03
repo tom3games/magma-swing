@@ -540,6 +540,39 @@ await t('テスト中は実際に無音', async () => { const r = await p.evalua
 await t('通しでエラーが出ていない', async () => { expect(p.errs.length === 0, p.errs.slice(0, 3).join('|')) })
 await p.close()
 
+// ---------- 左スティックは左下に固定（2026-11-03 本人「左スティックは固定で」）
+{
+  const q = await open(browser, { hasTouch: true, isMobile: true })
+  await q.evaluate(() => magma.start(31)); await q.waitForTimeout(300)
+  const ev = (type, x, y, id = 7) => q.evaluate(({ type, x, y, id }) => { const el = document.elementFromPoint(Math.max(0, Math.min(innerWidth - 1, x)), Math.max(0, Math.min(innerHeight - 1, y))) || document.body; el.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: y, bubbles: true, cancelable: true, pointerType: 'touch', isPrimary: true })) }, { type, x, y, id })
+  const geo = () => q.evaluate(() => { const r = document.getElementById('stick').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, r: r.width / 2, id: magma.stick.id, sx: magma.stick.x, sy: magma.stick.y } })
+  await t('左スティック: 位置は固定（別の所を触っても動かない）・円の外の遠い所では出てこない', async () => {
+    const g0 = await geo()
+    await ev('pointerdown', g0.x + g0.r * 2.2, g0.y - g0.r * 2.4, 11); await q.waitForTimeout(50)
+    const g1 = await geo(); await ev('pointerup', g0.x + g0.r * 2.2, g0.y - g0.r * 2.4, 11)
+    await ev('pointerdown', 40, 120, 12); const g2 = await geo(); await ev('pointerup', 40, 120, 12)
+    expect(g1.x === g0.x && g1.y === g0.y && g1.id == null && g2.id == null && g2.x === g0.x, JSON.stringify({ g0, g1, g2 }))
+    return { cx: Math.round(g0.x), cy: Math.round(g0.y), r: Math.round(g0.r) }
+  })
+  await t('左スティック: 円の少し外（半径×1.3）から触っても効く', async () => {
+    const g0 = await geo()
+    await ev('pointerdown', g0.x + g0.r * 1.3, g0.y, 13); const g1 = await geo(); await ev('pointerup', g0.x + g0.r * 1.3, g0.y, 13); const g2 = await geo()
+    expect(g1.id === 13 && g1.sx > 0.9 && g2.id == null && g2.sx === 0, JSON.stringify({ g1, g2 })); return { sx: +g1.sx.toFixed(2) }
+  })
+  await t('左スティック: 外から指をすべらせて円に入ったら、そこから倒した扱い・倒すと進む', async () => {
+    const g0 = await geo(), z0 = await q.evaluate(() => magma.g.p.z)
+    await ev('pointerdown', g0.x + g0.r * 0.2, g0.y - g0.r * 2.6, 14)
+    await ev('pointermove', g0.x + g0.r * 0.2, g0.y - g0.r * 1.8, 14); const gOut = await geo()
+    await ev('pointermove', g0.x + g0.r * 0.1, g0.y - g0.r * 0.9, 14); const gIn = await geo()
+    await q.waitForTimeout(600); const z1 = await q.evaluate(() => magma.g.p.z)
+    await ev('pointerup', g0.x, g0.y - g0.r * 0.9, 14); const gEnd = await geo()
+    expect(gOut.id == null && gIn.id === 14 && gIn.sy > 0.7 && z1 - z0 > 1 && gEnd.id == null, JSON.stringify({ gOut, gIn, z: [z0, z1], gEnd }))
+    return { sy: +gIn.sy.toFixed(2), moved: +(z1 - z0).toFixed(1) }
+  })
+  await t('左スティック: エラーなし', async () => { expect(q.errs.length === 0, q.errs.join('|')) })
+  await q.close()
+}
+
 // 6サイズ × 全画面
 for (const [w, h, name] of SIZES) {
   const touch = w < 1000

@@ -1,8 +1,8 @@
 // 地面はマグマ（MAGMA SWING）の描画と入力。中身の計算は shared/sim.js
 import * as THREE from 'three'
-import { T } from './data.js?v=9'
-import * as SIM from '../shared/sim.js?v=9'
-import { CharRunnerModel, loadCharAssets, charAssets } from './charmodel.js?v=9'
+import { T } from './data.js?v=10'
+import * as SIM from '../shared/sim.js?v=10'
+import { CharRunnerModel, loadCharAssets, charAssets } from './charmodel.js?v=10'
 const { K, makeGame, step, pickHook, botInput, makeBot } = SIM
 
 const $ = id => document.getElementById(id)
@@ -452,10 +452,15 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => { keys.delete(e.code); if (e.code === 'Space' && S.easy) holdDown = false })
 // スティック
 const stick = { id: null, x: 0, y: 0, cx: 0, cy: 0, r: 60 }
-$('stick').addEventListener('pointerdown', e => { const r = $('stick').getBoundingClientRect(); stick.id = e.pointerId; stick.cx = r.left + r.width / 2; stick.cy = r.top + r.height / 2; stick.r = r.width / 2; moveStick(e); try { $('stick').setPointerCapture(e.pointerId) } catch (er) {} soundStart() })
-$('stick').addEventListener('pointermove', e => { if (e.pointerId === stick.id) moveStick(e) })
+// 左下に固定（2026-11-03 本人「左スティックは固定で」。ワイヤー系共通）。触った所へ動かない。円の少し外（半径×1.35）から触っても効き、
+// 外から指をすべらせて円に入ったら、入った所から倒した扱いにする
+const STICK_GRACE = 1.35
+function stickGeom() { const el = $('stick'); if (!el.getClientRects().length || getComputedStyle(el).display === 'none') return null; const r = el.getBoundingClientRect(); stick.cx = r.left + r.width / 2; stick.cy = r.top + r.height / 2; stick.r = r.width / 2; return stick }
+const stickDist = e => Math.hypot(e.clientX - stick.cx, e.clientY - stick.cy) / stick.r
+function grabStick(e) { stick.id = e.pointerId; moveStick(e); soundStart() }
 const endStick = e => { if (e.pointerId !== stick.id) return; stick.id = null; stick.x = stick.y = 0; $('stick').firstElementChild.style.transform = '' }
-$('stick').addEventListener('pointerup', endStick); $('stick').addEventListener('pointercancel', endStick)
+document.addEventListener('pointermove', e => { if (e.pointerId === stick.id) moveStick(e) }, { capture: true })
+document.addEventListener('pointerup', endStick, { capture: true }); document.addEventListener('pointercancel', endStick, { capture: true })
 function moveStick(e) {
   let dx = (e.clientX - stick.cx) / stick.r, dy = (e.clientY - stick.cy) / stick.r
   const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l }
@@ -472,13 +477,17 @@ function trySkipIntro() { if (S.mode === 'intro' && !intro.long && intro.t > 0.2
 document.addEventListener('pointerdown', e => {
   if (S.mode === 'intro') { trySkipIntro(); return }
   if (S.mode !== 'play' || S.paused) return
-  if (e.target.closest && e.target.closest('button, a, .stick, .aux')) return
+  if (e.target.closest && e.target.closest('button, a, .aux')) return
+  if (!S.easy && stick.id == null && stickGeom() && stickDist(e) <= STICK_GRACE) { grabStick(e); return }
+  if (e.target.closest && e.target.closest('.stick')) return
   soundStart()
   if (S.easy) { holdDown = true; gest.set(e.pointerId, { easy: true }); return }
   gest.set(e.pointerId, { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, t: performance.now(), moved: false })
 }, { capture: true })
 document.addEventListener('pointermove', e => {
   const g = gest.get(e.pointerId); if (!g || g.easy) return
+  // 画面をなぞっていた指がスティックの円に入ったら、そこからスティック
+  if (stick.id == null && !S.easy && stickGeom() && stickDist(e) <= 1) { gest.delete(e.pointerId); grabStick(e); return }
   const dx = e.clientX - g.lx, dy = e.clientY - g.ly; g.lx = e.clientX; g.ly = e.clientY
   if (!g.moved && Math.hypot(e.clientX - g.x, e.clientY - g.y) > 12) g.moved = true
   if (g.moved) { camYaw = Math.max(-1.4, Math.min(1.4, camYaw - dx * 0.0072)); camPitch = Math.max(-0.3, Math.min(0.8, camPitch + dy * 0.0048)); camUserT = performance.now() }
@@ -824,7 +833,7 @@ window.magma = {
   start: (seed, opts = {}) => { if (opts.easy != null) { S.easy = !!opts.easy; applyLang() } startPlay(seed, !!opts.intro) },   // 検証は演出なしが既定
   intro, skipIntro: () => trySkipIntro(), get front() { return tsunami.position.z },
   showResult: () => { if (G) { G.p.dead = G.p.dead || 'lava'; G.over = true; endPlay() } },
-  input: once, setHold: v => { holdDown = v }, setStick: (x, y) => { stick.x = x; stick.y = y },
+  stick, input: once, setHold: v => { holdDown = v }, setStick: (x, y) => { stick.x = x; stick.y = y },
   dbg: {
     pause: v => { dbgPaused = v },
     step: n => { for (let i = 0; i < n; i++) tick(); draw(K.DT) },
