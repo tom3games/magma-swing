@@ -1,4 +1,5 @@
 // 迫力の演出のスクショ（速く飛んでいる場面と山場の瞬間）。node _shot_juice.mjs
+import './mute-auto.mjs'  // テスト中は絶対に音を出さない（playwright を無音に差し替え）
 import { chromium } from 'playwright'
 import { spawn } from 'node:child_process'
 import { MUTE_LAUNCH, muteContext } from './mute.mjs'

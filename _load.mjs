@@ -1,3 +1,4 @@
+import './mute-auto.mjs'  // テスト中は絶対に音を出さない（playwright を無音に差し替え）
 import { MUTE_LAUNCH, muteContext } from './mute.mjs'
 // 読み込みの速さを測る。Fast 3G 相当（下り 1.6Mbps・遅延 150ms）。node _load.mjs [URL]
 // 準備完了 = 人物の読み込みまで終わった時（__magmaLoaded、古い版は #loading が消えた時）

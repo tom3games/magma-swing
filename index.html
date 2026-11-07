@@ -190,7 +190,7 @@ button,canvas{touch-action:manipulation}
   if(!lang)lang=/^ja/.test(navigator.language||'ja')?'ja':'en';
   var TX=lang==='ja'?{msg:'街にフックを掛けています',err:'起動できませんでした',stall:'読み込みが止まっています。電波のいい所で',retry:'もう一度読み込む'}:{msg:'Rigging hooks over the lava',err:'Failed to start',stall:'Loading has stalled. Check your connection',retry:'Reload'};
   document.getElementById('bootMsg').textContent=TX.msg;if(lang!=='ja')document.documentElement.lang='en';
-  var FILES={'vendor/three.core.min.js':101,'vendor/three.module.min.js':87,'js/game.js':21,'vendor/jsm/loaders/GLTFLoader.js':25,'vendor/jsm/utils/BufferGeometryUtils.js':9,'shared/sim.js':6,'js/charmodel.js':4,'vendor/jsm/utils/SkeletonUtils.js':3,'js/data.js':3,'sfx.js':3};
+  var FILES={'vendor/three.core.min.js':101,'vendor/three.module.min.js':87,'js/game.js':21,'vendor/jsm/loaders/GLTFLoader.js':25,'vendor/jsm/utils/BufferGeometryUtils.js':9,'shared/sim.js':6,'js/charmodel.js':4,'vendor/jsm/utils/SkeletonUtils.js':3,'js/data.js':3,'sfx.js':3,'support.js':2};
   var GLB={'Ranger.glb':[212,457652],'Rig_Medium_General.glb':[53,139196],'Rig_Medium_MovementBasic.glb':[40,127208]};
   var got={},total=0,k,shown=0,lastMove=Date.now(),done=false,failed=false,errs=[];
   window.__bootFiles=Object.keys(FILES).concat(Object.keys(GLB));
@@ -248,6 +248,6 @@ button,canvas{touch-action:manipulation}
 </script>
 <script src="sfx.js?v=11"></script>
 <script type="module" src="js/game.js?v=11"></script>
-<script src="support.js?v=1" data-ja="冷たいジュース" data-en="a cold drink"></script>
+<script src="support.js?v=2" data-ja="冷たいジュース" data-en="a cold drink"></script>
 </body>
 </html>

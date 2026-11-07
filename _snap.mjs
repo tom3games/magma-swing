@@ -1,4 +1,5 @@
 // 目で見る用の撮影。node _snap.mjs [all]
+import './mute-auto.mjs'  // テスト中は絶対に音を出さない（playwright を無音に差し替え）
 import { chromium } from 'playwright'
 import { spawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'

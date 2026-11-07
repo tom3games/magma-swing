@@ -1,4 +1,5 @@
 // 重さの計測。node _perf.mjs [label]  スマホサイズ・CPU 4倍スロットルで、マグマの部品を1つずつ切ってフレーム時間とドローコールを測る
+import './mute-auto.mjs'  // テスト中は絶対に音を出さない（playwright を無音に差し替え）
 import { chromium } from 'playwright'
 import { spawn } from 'node:child_process'
 import { MUTE_LAUNCH, muteContext } from './mute.mjs'

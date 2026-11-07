@@ -1,3 +1,4 @@
+import './mute-auto.mjs'  // テスト中は絶対に音を出さない（playwright を無音に差し替え）
 import { MUTE_LAUNCH, muteContext } from './mute.mjs'
 // ロード画面のスクショ。node _bootshot.mjs（人物の 3D を止めて、読み込み途中の画面を撮る）
 import { chromium } from 'playwright'
