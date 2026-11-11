@@ -16,7 +16,7 @@ a{color:inherit}
 #speedfx{position:fixed;inset:0;width:100%;height:100%;z-index:4;pointer-events:none}
 #hitflash{position:fixed;inset:0;z-index:4;pointer-events:none;background:radial-gradient(ellipse at center,rgba(255,255,255,0) 35%,rgba(255,248,226,.6) 100%);opacity:0}
 
-.screen{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:max(14px,env(safe-area-inset-top)) 16px max(14px,env(safe-area-inset-bottom))}
+.screen{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:max(14px,env(safe-area-inset-top)) 16px max(14px,calc(env(safe-area-inset-bottom) + var(--inapp-bot,0px)))}
 .modal{justify-content:center;background:rgba(10,8,8,.55)}
 
 /* 案内標識（青地に白の縁） */
@@ -60,13 +60,13 @@ a{color:inherit}
 .toast{position:absolute;left:50%;top:13%;transform:translateX(-50%);font-family:var(--num);font-weight:700;font-size:26px;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.8);white-space:nowrap}
 .miss{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;color:#ff4632;font:700 40px/44px var(--num);text-align:center;text-shadow:0 0 6px #000;animation:missfade .5s forwards}
 @keyframes missfade{to{opacity:0;transform:scale(1.3)}}
-.stick{position:absolute;left:max(18px,env(safe-area-inset-left));bottom:max(18px,env(safe-area-inset-bottom));width:clamp(110px,30vmin,150px);height:clamp(110px,30vmin,150px);border-radius:50%;border:2px solid rgba(255,255,255,.45);background:rgba(0,0,0,.18);touch-action:none}
+.stick{position:absolute;left:max(18px,env(safe-area-inset-left));bottom:max(18px,calc(env(safe-area-inset-bottom) + var(--inapp-bot,0px)));width:clamp(110px,30vmin,150px);height:clamp(110px,30vmin,150px);border-radius:50%;border:2px solid rgba(255,255,255,.45);background:rgba(0,0,0,.18);touch-action:none}
 .knob{position:absolute;left:50%;top:50%;width:42%;height:42%;margin:-21% 0 0 -21%;border-radius:50%;background:rgba(247,247,242,.85)}
 .tb{position:absolute;border-radius:50%;background:rgba(20,20,20,.62);color:#fff;font-weight:700;touch-action:none}
-.tb.wire{right:max(18px,env(safe-area-inset-right));bottom:max(30px,env(safe-area-inset-bottom));width:clamp(84px,24vmin,108px);height:clamp(84px,24vmin,108px);font-size:15px;box-shadow:inset 0 0 0 4px var(--amber)}
-.tb.jump{right:calc(max(18px,env(safe-area-inset-right)) + clamp(92px,26vmin,118px));bottom:max(18px,env(safe-area-inset-bottom));width:clamp(62px,17vmin,78px);height:clamp(62px,17vmin,78px);font-size:14px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.6)}
+.tb.wire{right:max(18px,env(safe-area-inset-right));bottom:max(30px,calc(env(safe-area-inset-bottom) + var(--inapp-bot,0px)));width:clamp(84px,24vmin,108px);height:clamp(84px,24vmin,108px);font-size:15px;box-shadow:inset 0 0 0 4px var(--amber)}
+.tb.jump{right:calc(max(18px,env(safe-area-inset-right)) + clamp(92px,26vmin,118px));bottom:max(18px,calc(env(safe-area-inset-bottom) + var(--inapp-bot,0px)));width:clamp(62px,17vmin,78px);height:clamp(62px,17vmin,78px);font-size:14px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.6)}
 .tb.on{background:rgba(232,82,28,.85)}
-.hold-hint{position:absolute;left:50%;bottom:max(22px,env(safe-area-inset-bottom));transform:translateX(-50%);font-size:13px;opacity:.85;text-shadow:0 1px 4px #000;white-space:nowrap}
+.hold-hint{position:absolute;left:50%;bottom:max(22px,calc(env(safe-area-inset-bottom) + var(--inapp-bot,0px)));transform:translateX(-50%);font-size:13px;opacity:.85;text-shadow:0 1px 4px #000;white-space:nowrap}
 body:not(.touch) .stick,body:not(.touch) .tb{display:none}
 body.easy .stick,body.easy .tb{display:none}
 
